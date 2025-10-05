@@ -2,11 +2,19 @@ Verna
 =====
 
 This tool translates words and texts between English and Russian,
-lets you save advanced English words and phrases as cards for later memorisation,
-and sends your daily cards and a story using them in Telegram.
+saves advanced English words and phrases as cards for later memorisation,
+and sends your daily cards and a short story featuring them in Telegram.
 
-In many languages, the word for "translation" contains "ver", which inspired the tool's name.
+In many languages, the word for "translation" contains "ver".
+This useless fact inspired the tool's name.
 Also I like the film Miller's Crossing.
+
+Prerequisites
+-------------
+
+1. OpenAI API key (`--openai-api-key`)
+2. PostgreSQL database (`--db-conn-string`)
+3. Your own Telegram bot (`--tg-bot-token`, `--tg-chat-id`)
 
 Installation
 ------------
