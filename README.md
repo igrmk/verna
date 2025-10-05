@@ -18,7 +18,7 @@ From the project directory run:
 Deploy
 ------
 
-The daily card sender runs on DigitalOcean. To create an app, run:
+The daily card sender runs on DigitalOcean's App Platform. To create an app, run:
 
     python -m verna.create_spec
     doctl apps create --spec .do/app.yaml
