@@ -51,21 +51,24 @@ def _add_openai(p: configargparse.ArgParser) -> None:
     )
 
 
-def _add_telegram(p: configargparse.ArgParser) -> None:
+def _add_tg(p: configargparse.ArgParser, *, require_tg: bool) -> None:
     p.add_argument(
         '--send-to-tg',
         env_var='SEND_TO_TG',
         action=argparse.BooleanOptionalAction,
+        required=True,
         help='send output to Telegram',
     )
     p.add_argument(
         '--tg-bot-token',
         env_var='TG_BOT_TOKEN',
+        required=require_tg,
         help='Telegram bot token',
     )
     p.add_argument(
         '--tg-chat-id',
         env_var='TG_CHAT_ID',
+        required=require_tg,
         help='Telegram chat ID',
     )
 
@@ -93,6 +96,7 @@ def get_parser(
     *,
     sections: list[Sections],
     require_db: bool = False,
+    require_tg: bool = False,
 ) -> configargparse.ArgParser:
     config_paths = [
         Path(__file__).with_name('appsettings.ini').resolve(),
@@ -109,7 +113,7 @@ def get_parser(
     if Sections.DB in sections:
         _add_db(p, require_db=require_db)
     if Sections.TELEGRAM in sections:
-        _add_telegram(p)
+        _add_tg(p, require_tg=require_tg)
     if Sections.RANDOM in sections:
         _add_random(p)
     if Sections.VERNA in sections:
@@ -128,8 +132,9 @@ def parse_config(
     *,
     sections: list[Sections],
     require_db: bool = False,
+    require_tg: bool = False,
 ) -> argparse.Namespace:
-    p = get_parser(sections=sections, require_db=require_db)
+    p = get_parser(sections=sections, require_db=require_db, require_tg=require_tg)
     cfg = p.parse_args()
     if cfg.print_config:
         print_config(cfg)

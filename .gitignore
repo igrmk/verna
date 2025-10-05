@@ -1,4 +1,5 @@
-.venv/
+/.venv/
 __pycache__/
-build/
-verna.egg-info/
+/build/
+/verna.egg-info/
+/.do/app.yaml

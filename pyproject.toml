@@ -24,7 +24,6 @@ license = { text = "MIT" }
 verna = "verna.verna:main"
 verna-cards = "verna.random_cards:main"
 verna-remove = "verna.remove_lexeme:main"
-verna-migrator = "verna.migrator:main"
 
 [tool.setuptools]
 packages = ["verna"]
