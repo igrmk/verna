@@ -7,6 +7,7 @@ from platformdirs import user_config_dir
 
 
 class Sections(StrEnum):
+    COMMON = 'common'
     DB = 'db'
     TELEGRAM = 'telegram'
     RANDOM = 'random'
@@ -26,6 +27,12 @@ def _add_common(p: configargparse.ArgParser) -> None:
         '--print-config',
         action='store_true',
         help='print the loaded config and exit',
+        default=False,
+    )
+    p.add_argument(
+        '--debug',
+        action=argparse.BooleanOptionalAction,
+        help='debug mode',
         default=False,
     )
 
@@ -106,7 +113,7 @@ def get_parser(
     ]
     p = configargparse.ArgParser(
         default_config_files=config_paths,
-        config_file_parser_class=configargparse.IniConfigParser(sections, True),
+        config_file_parser_class=configargparse.IniConfigParser([Sections.COMMON, *sections], True),
         add_help=True,
     )
     _add_common(p)

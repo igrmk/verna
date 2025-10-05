@@ -1,6 +1,7 @@
 import json
 import sys
 import textwrap
+import argparse
 from enum import Enum, auto
 
 import psycopg
@@ -9,6 +10,11 @@ from pydantic import BaseModel, Field
 
 from verna.upper_str_enum import UpperStrEnum
 from verna.config import get_parser, Sections, print_config
+
+
+class Mode(UpperStrEnum):
+    LEXEME = auto()
+    TEXT = auto()
 
 
 class Language(UpperStrEnum):
@@ -32,6 +38,7 @@ class DictEntry(BaseModel):
 
 
 class TranslatorResponse(BaseModel):
+    mode: Mode
     language: Language
     typo_note: str | None = None
     rp: str | None = None
@@ -52,18 +59,20 @@ INSTRUCTIONS = textwrap.dedent("""
     (excluding informal usage, colloquial usage, or colloquial contractions such as "wanna" or "gonna"),
     add a short note to `typo_note`.
 
-    Let mode be:
-      - "lexeme", if Q is a single word, a fixed phraseme, or a short everyday sentence (≤5 words)
-      - "text", otherwise
+    Fill `mode` to:
+      - `LEXEME`, if both of the following are true:
+        - Q is a single word, a fixed phraseme, or a short everyday sentence
+        - Q is shorter than 4 words
+      - `TEXT`, otherwise
 
-    If mode = "lexeme", add a new entry for Q's text in `dict_entries`,
-    filling it according to the `DictEntry` filling rules.
+    If `mode` = `LEXEME`, add Q in full to `dict_entries`, filling it according to the `DictEntry` filling rules.
 
-    Otherwise, if mode = "text", fill the root fields:
+    Otherwise, if `mode` = `TEXT`, fill the root fields:
       - `translation` — to Russian if Q is in English, or to English if Q is in Russian
       - `rp` — British RP transcription without slashes, only if Q is in English and ≤5 words
-      - `dict_entries` — include all and only English C1+ lexemes in Q,
-        filling each entry according to the `DictEntry` filling rules.
+      - `dict_entries` — list all advanced English lexemes (C1+) in Q.
+        Don't list beginner-level lexemes and proper names.
+        Fill each entry according to the `DictEntry` filling rules.
         Treat different forms (e.g., verb and noun) as one lexeme
 
     `DictEntry` filling rules (for the current entry E):
@@ -105,7 +114,9 @@ def print_dict_entry(e: DictEntry) -> None:
             print_word('  ', t)
 
 
-def print_response(r: TranslatorResponse) -> None:
+def print_response(cfg: argparse.Namespace, r: TranslatorResponse) -> None:
+    if cfg.debug:
+        print(f'MODE: {r.mode}')
     if r.language == Language.OTHER:
         print('UNSUPPORTED LANGUAGE')
     if r.typo_note:
@@ -212,7 +223,7 @@ def main() -> None:
         raise SystemExit("OpenAI response could not be parsed")
 
     data: TranslatorResponse = resp.output_parsed
-    print_response(data)
+    print_response(cfg, data)
 
     english_entries = [e for e in data.dict_entries if e.lexeme.language == Language.ENGLISH]
     if english_entries and cfg.db_conn_string:
