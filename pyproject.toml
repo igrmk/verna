@@ -29,4 +29,4 @@ verna-remove = "verna.remove_lexeme:main"
 packages = ["verna"]
 
 [tool.setuptools.package-data]
-verna = ["appsettings.ini"]
+verna = ["verna.ini"]

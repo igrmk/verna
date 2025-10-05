@@ -106,10 +106,9 @@ def get_parser(
     require_tg: bool = False,
 ) -> configargparse.ArgParser:
     config_paths = [
-        Path(__file__).with_name('appsettings.ini').resolve(),
+        Path(__file__).with_name('verna.ini').resolve(),
         Path(user_config_dir('verna')) / 'verna.ini',
         Path.home() / '.config' / 'verna' / 'verna.ini',
-        'appsettings.dev.ignore.ini',
     ]
     p = configargparse.ArgParser(
         default_config_files=config_paths,
