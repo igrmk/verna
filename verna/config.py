@@ -12,6 +12,7 @@ class Sections(StrEnum):
     RANDOM = 'random'
     VERNA = 'verna'
     REMOVE = 'remove'
+    OPENAI = 'openai'
 
 
 def _add_common(p: configargparse.ArgParser) -> None:
@@ -32,11 +33,21 @@ def _add_common(p: configargparse.ArgParser) -> None:
 def _add_db(p: configargparse.ArgParser, *, require_db: bool) -> None:
     p.add_argument(
         '--db-conn-string',
+        env_var='DB_CONN_STRING',
         type=str,
         required=require_db,
         metavar='STR',
-        env_var='DB_CONN_STRING',
         help='PostgreSQL connection string',
+    )
+
+
+def _add_openai(p: configargparse.ArgParser) -> None:
+    p.add_argument(
+        '--openai-api-key',
+        env_var='OPENAI_API_KEY',
+        type=str,
+        required=True,
+        help='OpenAI API key',
     )
 
 
@@ -103,6 +114,8 @@ def get_parser(
         _add_random(p)
     if Sections.VERNA in sections:
         _add_verna(p)
+    if Sections.OPENAI in sections:
+        _add_openai(p)
     return p
 
 

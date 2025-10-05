@@ -102,7 +102,7 @@ INSTRUCTIONS = textwrap.dedent("""
 
 
 def main() -> None:
-    parser = get_parser(sections=[Sections.DB, Sections.TELEGRAM, Sections.RANDOM], require_db=True)
+    parser = get_parser(sections=[Sections.DB, Sections.TELEGRAM, Sections.RANDOM, Sections.OPENAI], require_db=True)
     cfg = parser.parse_args()
 
     if cfg.print_config:
@@ -126,7 +126,7 @@ def main() -> None:
         print(card_text)
         tg_card_messages.append(card_text)
 
-    client = OpenAI()
+    client = OpenAI(api_key=cfg.openai_api_key)
 
     lexeme_list = '\n'.join(f'[{idx}] {c.lexeme}' for idx, c in enumerate(cards, 1))
     request_text = textwrap.dedent(f"""

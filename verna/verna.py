@@ -10,8 +10,6 @@ from pydantic import BaseModel, Field
 from verna.upper_str_enum import UpperStrEnum
 from verna.config import get_parser, Sections, print_config
 
-client = OpenAI()
-
 
 class Language(UpperStrEnum):
     ENGLISH = auto()
@@ -184,7 +182,7 @@ def save_cards(conn, entries: list[DictEntry]) -> None:
 
 
 def main() -> None:
-    parser = get_parser(sections=[Sections.DB, Sections.VERNA], require_db=False)
+    parser = get_parser(sections=[Sections.DB, Sections.VERNA, Sections.OPENAI], require_db=False)
     parser.add_argument('query', nargs='*')
     cfg = parser.parse_args()
 
@@ -199,6 +197,8 @@ def main() -> None:
     query = ' '.join(cfg.query).strip()
     if not query:
         raise SystemExit('You must provide a query or use --show-schema')
+
+    client = OpenAI(api_key=cfg.openai_api_key)
 
     resp = client.responses.parse(
         model='gpt-5',
