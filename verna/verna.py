@@ -67,7 +67,8 @@ INSTRUCTIONS = textwrap.dedent("""
         - Q is ≤5 words
       - `TEXT`, otherwise
 
-    If `mode` = `LEXEME`, add Q in full to `dict_entries`, filling it according to the `DictEntry` filling rules.
+    If `mode` = `LEXEME`, add Q in full to `dict_entries` as a single entry,
+    filling it according to the `DictEntry` filling rules.
 
     Otherwise, if `mode` = `TEXT`, fill the root fields:
       - `translation` — to Russian if Q is in English, or to English if Q is in Russian
