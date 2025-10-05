@@ -38,7 +38,7 @@ class DictEntry(BaseModel):
 
 
 class TranslatorResponse(BaseModel):
-    mode: Mode
+    mode: Mode | None = None
     language: Language
     typo_note: str | None = None
     rp: str | None = None
@@ -62,7 +62,7 @@ INSTRUCTIONS = textwrap.dedent("""
     Fill `mode` to:
       - `LEXEME`, if both of the following are true:
         - Q is a single word, a fixed phraseme, or a short everyday sentence
-        - Q is shorter than 4 words
+        - Q is ≤5 words
       - `TEXT`, otherwise
 
     If `mode` = `LEXEME`, add Q in full to `dict_entries`, filling it according to the `DictEntry` filling rules.
@@ -89,46 +89,50 @@ INSTRUCTIONS = textwrap.dedent("""
 """).strip()
 
 
-def print_word(prefix: str, lex: Lexeme) -> None:
-    def prefix_print(s: str) -> None:
-        print(f'{prefix}{s}')
+def format_word(prefix: str, lex: Lexeme) -> str:
+    parts = []
+
+    def append_prefixed(s: str) -> None:
+        parts.append(f'{prefix}{s}')
+
     if lex.text and lex.rp:
-        prefix_print(f'* {lex.text} /{lex.rp}/')
+        append_prefixed(f'* {lex.text} /{lex.rp}/')
     elif lex.text:
-        prefix_print(f'* {lex.text}')
+        append_prefixed(f'* {lex.text}')
     if lex.base_form:
-        prefix_print(f'BASE FORM: {lex.base_form}')
+        append_prefixed(f'BASE FORM: {lex.base_form}')
     if lex.past_simple:
-        prefix_print(f'PAST SIMPLE: {lex.past_simple}')
+        append_prefixed(f'PAST SIMPLE: {lex.past_simple}')
     if lex.past_participle:
-        prefix_print(f'PAST PARTICIPLE: {lex.past_participle}')
+        append_prefixed(f'PAST PARTICIPLE: {lex.past_participle}')
+    return '\n'.join(parts)
 
 
-def print_dict_entry(e: DictEntry) -> None:
-    print()
-    print_word('', e.lexeme)
+def format_dict_entry(e: DictEntry) -> str:
+    parts = []
+    parts.append(format_word('', e.lexeme))
     if e.translations:
-        print()
-        print('TRANSLATIONS:')
+        parts.append('TRANSLATIONS:')
         for t in e.translations:
-            print_word('  ', t)
+            parts.append(format_word('  ', t))
+    return '\n'.join(parts)
 
 
 def print_response(cfg: argparse.Namespace, r: TranslatorResponse) -> None:
+    parts = []
     if cfg.debug:
-        print(f'MODE: {r.mode}')
+        parts.append(f'MODE: {r.mode}')
     if r.language == Language.OTHER:
-        print('UNSUPPORTED LANGUAGE')
+        parts.append('UNSUPPORTED LANGUAGE')
     if r.typo_note:
-        print(f'TYPO NOTE: {r.typo_note}')
-    if r.translation:
-        print()
-        print('TRANSLATION:')
-        print(r.translation)
+        parts.append(f'TYPO NOTE: {r.typo_note}')
     if r.rp:
-        print(f'/{r.rp}/')
+        parts.append(f'/{r.rp}/')
+    if r.translation:
+        parts.append(f'TRANSLATION:\n{r.translation}')
     for e in r.dict_entries:
-        print_dict_entry(e)
+        parts.append(format_dict_entry(e))
+    print('\n\n'.join(parts))
 
 
 class ConfirmResult(Enum):
