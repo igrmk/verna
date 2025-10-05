@@ -7,6 +7,8 @@ from enum import Enum, auto
 import psycopg
 from openai import OpenAI
 from pydantic import BaseModel, Field
+from prompt_toolkit import PromptSession
+from prompt_toolkit.key_binding import KeyBindings
 
 from verna.upper_str_enum import UpperStrEnum
 from verna.config import get_parser, Sections, print_config
@@ -196,6 +198,20 @@ def save_cards(conn, entries: list[DictEntry]) -> None:
         conn.commit()
 
 
+def read_user_input() -> str:
+    kb = KeyBindings()
+
+    @kb.add("c-d")
+    def _(event):
+        event.app.exit(result=event.app.current_buffer.text)
+
+    def cont(width: int, line_number: int, is_soft_wrap: int) -> str:
+        return " " * width if is_soft_wrap else "… "
+
+    session: PromptSession = PromptSession()
+    return session.prompt("Ctrl-D > ", multiline=True, prompt_continuation=cont, key_bindings=kb)
+
+
 def main() -> None:
     parser = get_parser(sections=[Sections.DB, Sections.VERNA, Sections.OPENAI], require_db=False)
     parser.add_argument('query', nargs='*')
@@ -210,8 +226,16 @@ def main() -> None:
         sys.exit(0)
 
     query = ' '.join(cfg.query).strip()
+    no_query_error = SystemExit('You must provide a query or use --show-schema')
     if not query:
-        raise SystemExit('You must provide a query or use --show-schema')
+        if not sys.stdin.isatty():
+            query = sys.stdin.read().strip()
+            if not query:
+                raise no_query_error
+    if not query:
+        query = read_user_input().strip()
+    if not query:
+        raise no_query_error
 
     client = OpenAI(api_key=cfg.openai_api_key)
 
@@ -230,7 +254,7 @@ def main() -> None:
     print_response(cfg, data)
 
     english_entries = [e for e in data.dict_entries if e.lexeme.language == Language.ENGLISH]
-    if english_entries and cfg.db_conn_string:
+    if sys.stdin.isatty() and english_entries and cfg.db_conn_string:
         try:
             with psycopg.connect(cfg.db_conn_string) as conn:
                 save_cards(conn, english_entries)
