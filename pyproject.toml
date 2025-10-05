@@ -1,32 +1,33 @@
 [build-system]
-requires = ["setuptools>=69"]
-build-backend = "setuptools.build_meta"
+requires = ['setuptools>=69']
+build-backend = 'setuptools.build_meta'
 
 [project]
-name = "verna"
-version = "0.1.1"
-description = "CLI tools for lexeme cards, translation, and Telegram delivery"
-readme = "README.md"
-requires-python = ">=3.11"
+name = 'verna'
+version = '0.1.1'
+description = 'CLI tools for lexeme cards, translation, and Telegram delivery'
+readme = 'README.md'
+requires-python = '>=3.11'
 dependencies = [
-  "psycopg[binary]==3.2.10",
-  "openai==1.109.1",
-  "configargparse==1.7.1",
-  "requests==2.32.5",
-  "platformdirs==4.4.0",
+  'psycopg[binary]==3.2.10',
+  'openai==1.109.1',
+  'configargparse==1.7.1',
+  'requests==2.32.5',
+  'platformdirs==4.4.0',
+  'prompt_toolkit==3.0.52',
 ]
 authors = [
-  { name = "igrmk" }
+  { name = 'igrmk' }
 ]
-license = { text = "MIT" }
+license = { text = 'MIT' }
 
 [project.scripts]
-verna = "verna.verna:main"
-verna-cards = "verna.random_cards:main"
-verna-remove = "verna.remove_lexeme:main"
+verna = 'verna.verna:main'
+verna-cards = 'verna.random_cards:main'
+verna-remove = 'verna.remove_lexeme:main'
 
 [tool.setuptools]
-packages = ["verna"]
+packages = ['verna']
 
 [tool.setuptools.package-data]
-verna = ["verna.ini"]
+verna = ['verna.ini']
