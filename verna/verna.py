@@ -202,15 +202,15 @@ def save_cards(conn, entries: list[DictEntry]) -> None:
 def read_user_input() -> str:
     kb = KeyBindings()
 
-    @kb.add("c-d")
+    @kb.add('c-d')
     def _(event):
         event.app.exit(result=event.app.current_buffer.text)
 
     def cont(width: int, line_number: int, is_soft_wrap: int) -> str:
-        return " " * width if is_soft_wrap else "… "
+        return ' ' * width if is_soft_wrap else ' ' * (width - 2) + '… '
 
     session: PromptSession = PromptSession()
-    return session.prompt("Ctrl-D> ", multiline=True, prompt_continuation=cont, key_bindings=kb)
+    return session.prompt('Ctrl-D> ', multiline=True, prompt_continuation=cont, key_bindings=kb)
 
 
 def main() -> None:
@@ -249,7 +249,7 @@ def main() -> None:
     )
 
     if resp.output_parsed is None:
-        raise SystemExit("OpenAI response could not be parsed")
+        raise SystemExit('OpenAI response could not be parsed')
 
     data: TranslatorResponse = resp.output_parsed
     print_response(cfg, data)
