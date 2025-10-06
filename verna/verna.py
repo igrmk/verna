@@ -210,7 +210,7 @@ def read_user_input() -> str:
         return " " * width if is_soft_wrap else "… "
 
     session: PromptSession = PromptSession()
-    return session.prompt("Ctrl-D > ", multiline=True, prompt_continuation=cont, key_bindings=kb)
+    return session.prompt("Ctrl-D> ", multiline=True, prompt_continuation=cont, key_bindings=kb)
 
 
 def main() -> None:
