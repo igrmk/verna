@@ -199,7 +199,7 @@ def save_cards(conn, entries: list[DictEntry]) -> None:
         conn.commit()
 
 
-def read_user_input() -> str:
+def read_interactively() -> str:
     kb = KeyBindings()
 
     @kb.add('c-d')
@@ -234,7 +234,7 @@ def main() -> None:
             if not query:
                 raise no_query_error
     if not query:
-        query = read_user_input().strip()
+        query = read_interactively().strip()
     if not query:
         raise no_query_error
 
