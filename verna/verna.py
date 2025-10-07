@@ -196,6 +196,8 @@ def save_cards(conn, entries: list[DictEntry]) -> None:
             inserted = cur.fetchone()[0]
             if not inserted:
                 print('Merged translations')
+            else:
+                print('Saved')
         conn.commit()
 
 
