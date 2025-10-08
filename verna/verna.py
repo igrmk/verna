@@ -68,7 +68,7 @@ INSTRUCTIONS = textwrap.dedent("""
       - `TEXT`, otherwise
 
     If `mode` = `LEXEME`, add Q in full to `dict_entries` as a single entry,
-    filling it according to the `DictEntry` filling rules.
+    filling it according to the `DictEntry` filling rules. Omit other root fields.
 
     Otherwise, if `mode` = `TEXT`, fill the root fields:
       - `translation` — to Russian if Q is in English, or to English if Q is in Russian
@@ -87,8 +87,8 @@ INSTRUCTIONS = textwrap.dedent("""
       - `text` — required
       - `language` — required
       - `rp` — British RP transcription without slashes, only if L is in English
-      - `base_form` — only if Q is in English and L is not in its base form
-      - `past_simple` and `past_participle` — only if Q is in English and L is irregular
+      - `base_form` — only if Q is in English and L is a word not in its base form
+      - `past_simple` and `past_participle` — only if Q is in English and L is an irregular word
 """).strip()
 
 
