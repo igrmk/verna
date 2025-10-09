@@ -52,14 +52,18 @@ INSTRUCTIONS = textwrap.dedent("""
     You are a translator and dictionary. Swear words are allowed when necessary.
     Informal language is allowed as well.
     Do not explain your actions. Output ONLY JSON matching the schema.
+    Between UK and US variants, choose UK.
 
     Let Q be the user input.
     Set `language` to Q's language.
     If `language` is `OTHER`, output ONLY {"language": "OTHER"}.
 
-    If you suspect a genuine spelling typo
-    (excluding informal usage, colloquial usage, or colloquial contractions such as "wanna" or "gonna"),
-    add a short note to `typo_note`.
+    If you suspect a genuine spelling typo, add a short note to `typo_note`.
+    Not a typo:
+      - informal usage
+      - colloquial expressions
+      - contractions such as "wanna" or "gonna"
+      - UK-only spelling variants
 
     Fill `mode` to:
       - `LEXEME`, if both of the following are true:
