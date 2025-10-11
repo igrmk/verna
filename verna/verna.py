@@ -3,6 +3,7 @@ import sys
 import textwrap
 import argparse
 from enum import Enum, auto
+from string import Template
 
 import psycopg
 from openai import OpenAI
@@ -48,13 +49,17 @@ class TranslatorResponse(BaseModel):
     dict_entries: list[DictEntry] = Field(default_factory=list)
 
 
-INSTRUCTIONS = textwrap.dedent("""
+INSTRUCTIONS = Template(textwrap.dedent("""
     You are a translator and dictionary. Swear words are allowed when necessary.
     Informal language is allowed as well.
     Do not explain your actions. Output ONLY JSON matching the schema.
     Between UK and US variants, choose UK.
 
     Let Q be the user input.
+
+    Input variables:
+      - WORD_COUNT(Q) = ${WORD_COUNT}
+
     Set `language` to Q's language.
     If `language` is `OTHER`, output ONLY {"language": "OTHER"}.
 
@@ -68,7 +73,7 @@ INSTRUCTIONS = textwrap.dedent("""
     Fill `mode` to:
       - `LEXEME`, if both of the following are true:
         - Q is a single word, a fixed phraseme, or a short everyday sentence
-        - Q is ≤5 words
+        - WORD_COUNT(Q) ≤ 5
       - `TEXT`, otherwise
 
     If `mode` = `LEXEME`, add Q in full to `dict_entries` as a single entry,
@@ -76,7 +81,7 @@ INSTRUCTIONS = textwrap.dedent("""
 
     Otherwise, if `mode` = `TEXT`, fill the root fields:
       - `translation` — to Russian if Q is in English, or to English if Q is in Russian
-      - `rp` — British RP transcription without slashes, only if Q is in English and ≤5 words
+      - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 5
       - `dict_entries` — list all advanced English lexemes (C1+) in Q.
         Don't list beginner-level lexemes and proper names.
         Fill each entry according to the `DictEntry` filling rules.
@@ -93,7 +98,7 @@ INSTRUCTIONS = textwrap.dedent("""
       - `rp` — British RP transcription without slashes, only if L is in English
       - `base_form` — only if Q is in English and L is a word not in its base form
       - `past_simple` and `past_participle` — only if Q is in English and L is an irregular word
-""").strip()
+""").strip())
 
 
 def format_word(prefix: str, lex: Lexeme) -> str:
@@ -249,7 +254,7 @@ def main() -> None:
     resp = client.responses.parse(
         model='gpt-5',
         reasoning={'effort': 'minimal'},
-        instructions=INSTRUCTIONS,
+        instructions=INSTRUCTIONS.substitute({'WORD_COUNT': len(query.split())}),
         input=query,
         text_format=TranslatorResponse,
     )
