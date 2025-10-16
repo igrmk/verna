@@ -168,7 +168,7 @@ def confirm(prompt: str) -> ConfirmResult:
         print('Please enter y, n, or q')
 
 
-def save_cards(conn, entries: list[DictEntry]) -> None:
+def save_cards(cfg, entries: list[DictEntry]) -> None:
     print()
     for e in entries:
         res = confirm(f'Save "{e.lexeme.text}"?')
@@ -178,36 +178,43 @@ def save_cards(conn, entries: list[DictEntry]) -> None:
         if res == ConfirmResult.NO:
             continue
         translations = [t.text.strip() for t in e.translations]
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                    insert into cards (lexeme, rp, base_form, past_simple, past_participle, translations)
-                    values (%s, %s, %s, %s, %s, %s)
-                    on conflict (lower(lexeme)) do update
-                    set translations = cards.translations || (
-                        select array(
-                            select x
-                            from unnest(excluded.translations) as x
-                            where not x = any(cards.translations)
-                        )
+        try:
+            with psycopg.connect(cfg.db_conn_string) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                            insert into cards (lexeme, rp, base_form, past_simple, past_participle, translations)
+                            values (%s, %s, %s, %s, %s, %s)
+                            on conflict (lower(lexeme)) do update
+                            set translations = cards.translations || (
+                                select array(
+                                    select x
+                                    from unnest(excluded.translations) as x
+                                    where not x = any(cards.translations)
+                                )
+                            )
+                            returning (xmax = 0) as inserted;
+                        """,
+                        (
+                            e.lexeme.text.strip(),
+                            e.lexeme.rp,
+                            e.lexeme.base_form,
+                            e.lexeme.past_simple,
+                            e.lexeme.past_participle,
+                            translations,
+                        ),
                     )
-                    returning (xmax = 0) as inserted;
-                """,
-                (
-                    e.lexeme.text.strip(),
-                    e.lexeme.rp,
-                    e.lexeme.base_form,
-                    e.lexeme.past_simple,
-                    e.lexeme.past_participle,
-                    translations,
-                ),
-            )
-            inserted = cur.fetchone()[0]
-            if not inserted:
-                print('Merged translations')
-            else:
-                print('Saved')
-        conn.commit()
+                    row = cur.fetchone()
+                    assert row is not None
+                    inserted = [0]
+                    if not inserted:
+                        print('Merged translations')
+                    else:
+                        print('Saved')
+                conn.commit()
+        except psycopg.Error as e:
+            print(f'Failed to save cards to postgres: {e}')
+            sys.exit(2)
 
 
 def read_interactively() -> str:
@@ -267,12 +274,7 @@ def main() -> None:
 
     english_entries = [e for e in data.dict_entries if e.lexeme.language == Language.ENGLISH]
     if sys.stdin.isatty() and english_entries and cfg.db_conn_string:
-        try:
-            with psycopg.connect(cfg.db_conn_string) as conn:
-                save_cards(conn, english_entries)
-        except psycopg.Error as e:
-            print(f'Failed to save cards to postgres: {e}')
-            sys.exit(2)
+        save_cards(cfg, english_entries)
 
 
 if __name__ == '__main__':
