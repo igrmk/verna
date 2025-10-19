@@ -17,6 +17,7 @@ class Card:
     past_simple: str | None
     past_participle: str | None
     translations: list[str]
+    context_sentence: str | None
 
 
 class Passage(BaseModel):
@@ -57,7 +58,7 @@ def fetch_random_cards(conn, limit: int) -> list[Card]:
     with conn.cursor() as cur:
         cur.execute(
             """
-                select lexeme, rp, past_simple, past_participle, translations
+                select lexeme, rp, past_simple, past_participle, translations, context_sentence
                 from cards
                 order by random()
                 limit %s;
@@ -72,6 +73,7 @@ def fetch_random_cards(conn, limit: int) -> list[Card]:
                 past_simple=row[2],
                 past_participle=row[3],
                 translations=row[4],
+                context_sentence=row[5],
             )
             for row in rows
         ]
@@ -87,6 +89,8 @@ def format_card(idx: int, card: Card) -> str:
         lines.append(f'PAST PARTICIPLE: {card.past_participle}')
     for t in card.translations:
         lines.append(f'  - {t}')
+    if card.context_sentence:
+        lines.append(f'EXAMPLE:\n{card.context_sentence}')
     return '\n'.join(lines)
 
 
