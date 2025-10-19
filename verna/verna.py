@@ -38,6 +38,7 @@ class Lexeme(BaseModel):
 class DictEntry(BaseModel):
     lexeme: Lexeme
     translations: list[Lexeme]
+    context_sentence: str | None
 
 
 class TranslatorResponse(BaseModel):
@@ -49,56 +50,60 @@ class TranslatorResponse(BaseModel):
     dict_entries: list[DictEntry] = Field(default_factory=list)
 
 
-INSTRUCTIONS = Template(textwrap.dedent("""
-    You are a translator and dictionary. Swear words are allowed when necessary.
-    Informal language is allowed as well.
-    Do not explain your actions. Output ONLY JSON matching the schema.
-    Between UK and US variants, choose UK.
+INSTRUCTIONS = Template(
+    textwrap.dedent("""
+        You are a translator and dictionary. Swear words are allowed when necessary.
+        Informal language is allowed as well.
+        Do not explain your actions. Output ONLY JSON matching the schema.
+        Between UK and US variants, choose UK.
 
-    Let Q be the user input.
+        Let Q be the user input.
 
-    Input variables:
-      - WORD_COUNT(Q) = ${WORD_COUNT}
+        Input variables:
+          - WORD_COUNT(Q) = ${WORD_COUNT}
 
-    Set `language` to Q's language.
-    If `language` is `OTHER`, output ONLY {"language": "OTHER"}.
+        Set `language` to Q's language.
+        If `language` is `OTHER`, output ONLY {"language": "OTHER"}.
 
-    If you suspect a genuine spelling typo, add a short note to `typo_note`.
-    Not a typo:
-      - informal usage
-      - colloquial expressions
-      - contractions such as "wanna" or "gonna"
-      - UK-only spelling variants
+        If you suspect a genuine spelling typo, add a short note to `typo_note`.
+        Not a typo:
+          - informal usage
+          - colloquial expressions
+          - contractions such as "wanna" or "gonna"
+          - UK-only spelling variants
 
-    Fill `mode` to:
-      - `LEXEME`, if both of the following are true:
-        - Q is a single word, a fixed phraseme, or a short everyday sentence
-        - WORD_COUNT(Q) ≤ 5
-      - `TEXT`, otherwise
+        Fill `mode` to:
+          - `LEXEME`, if both of the following are true:
+            - Q is a single word, a fixed phraseme, or a short everyday sentence
+            - WORD_COUNT(Q) ≤ 5
+          - `TEXT`, otherwise
 
-    If `mode` = `LEXEME`, add Q in full to `dict_entries` as a single entry,
-    filling it according to the `DictEntry` filling rules. Omit other root fields.
+        If `mode` = `LEXEME`, add Q in full to `dict_entries` as a single entry,
+        filling it according to the `DictEntry` filling rules. Omit other root fields.
 
-    Otherwise, if `mode` = `TEXT`, fill the root fields:
-      - `translation` — to Russian if Q is in English, or to English if Q is in Russian
-      - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 5
-      - `dict_entries` — list all advanced English lexemes (C1+) in Q.
-        Don't list beginner-level lexemes and proper names.
-        Fill each entry according to the `DictEntry` filling rules.
-        Treat different forms (e.g., verb and noun) as one lexeme
+        Otherwise, if `mode` = `TEXT`, fill the root fields:
+          - `translation` — to Russian if Q is in English, or to English if Q is in Russian
+          - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 5
+          - `dict_entries` — list all advanced English lexemes (C1+) in Q.
+            Don't list beginner-level lexemes and proper names.
+            Fill each entry according to the `DictEntry` filling rules.
+            Treat different forms (e.g., verb and noun) as one lexeme
 
-    `DictEntry` filling rules (for the current entry E):
-      - Fill `E.lexeme` according to the `Lexeme` filling rules
-      - Fill `E.translations` with an exhaustive list of translations,
-        including those outside Q's context, following the `Lexeme` filling rules
+        `DictEntry` filling rules (for the current entry E):
+          - Fill `E.lexeme` according to the `Lexeme` filling rules
+          - Fill `E.translations` with an exhaustive list of translations,
+            including those outside Q's context, following the `Lexeme` filling rules
+          - Fill `E.context_sentence` with the full sentence where the lexeme is used in Q,
+            correcting grammar and spelling beforehand; set to null if unavailable
 
-    `Lexeme` filling rules (for the current lexeme L):
-      - `text` — required
-      - `language` — required
-      - `rp` — British RP transcription without slashes, only if L is in English
-      - `base_form` — only if Q is in English and L is a word not in its base form
-      - `past_simple` and `past_participle` — only if Q is in English and L is an irregular word
-""").strip())
+        `Lexeme` filling rules (for the current lexeme L):
+          - `text` — required
+          - `language` — required
+          - `rp` — British RP transcription without slashes, only if L is in English
+          - `base_form` — only if Q is in English and L is a word not in its base form
+          - `past_simple` and `past_participle` — only if Q is in English and L is an irregular word
+    """).strip()
+)
 
 
 def format_word(prefix: str, lex: Lexeme) -> str:
@@ -127,6 +132,9 @@ def format_dict_entry(e: DictEntry) -> str:
         parts.append('TRANSLATIONS:')
         for t in e.translations:
             parts.append(format_word('  ', t))
+    if e.context_sentence is not None:
+        parts.append('EXAMPLE:')
+        parts.append(e.context_sentence)
     return '\n'.join(parts)
 
 
@@ -183,8 +191,16 @@ def save_cards(cfg, entries: list[DictEntry]) -> None:
                 with conn.cursor() as cur:
                     cur.execute(
                         """
-                            insert into cards (lexeme, rp, base_form, past_simple, past_participle, translations)
-                            values (%s, %s, %s, %s, %s, %s)
+                            insert into cards (
+                                lexeme,
+                                rp,
+                                base_form,
+                                past_simple,
+                                past_participle,
+                                translations,
+                                context_sentence
+                            )
+                            values (%s, %s, %s, %s, %s, %s, %s)
                             on conflict (lower(lexeme)) do update
                             set translations = cards.translations || (
                                 select array(
@@ -202,6 +218,7 @@ def save_cards(cfg, entries: list[DictEntry]) -> None:
                             e.lexeme.past_simple,
                             e.lexeme.past_participle,
                             translations,
+                            e.context_sentence,
                         ),
                     )
                     row = cur.fetchone()

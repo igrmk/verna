@@ -31,3 +31,9 @@ packages = ['verna']
 
 [tool.setuptools.package-data]
 verna = ['verna.ini']
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.format]
+quote-style = "single"

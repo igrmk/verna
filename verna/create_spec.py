@@ -18,7 +18,11 @@ def upsert_env(envs: list[dict], key: str, value: str) -> None:
 
 
 def main() -> None:
-    cfg = parse_config(sections=[Sections.DB, Sections.TELEGRAM, Sections.OPENAI], require_db=True, require_tg=True)
+    cfg = parse_config(
+        sections=[Sections.DB, Sections.TELEGRAM, Sections.OPENAI],
+        require_db=True,
+        require_tg=True,
+    )
 
     if not TEMPLATE_PATH.exists():
         sys.exit(f'Template not found: {TEMPLATE_PATH}')

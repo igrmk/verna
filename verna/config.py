@@ -46,6 +46,13 @@ def _add_db(p: configargparse.ArgParser, *, require_db: bool) -> None:
         metavar='STR',
         help='PostgreSQL connection string',
     )
+    p.add_argument(
+        '--db-owner',
+        env_var='DB_OWNER',
+        type=str,
+        metavar='STR',
+        help='PostgreSQL database owner',
+    )
 
 
 def _add_openai(p: configargparse.ArgParser) -> None:

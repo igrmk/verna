@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import psycopg
+from psycopg import sql
 from verna.config import parse_config, Sections
 
 
@@ -18,14 +19,9 @@ def ensure_migrations_table(conn: psycopg.Connection) -> None:
     conn.commit()
 
 
-def bootstrap_initial_version(conn: psycopg.Connection) -> None:
+def set_role(conn: psycopg.Connection, role_name: str) -> None:
     with conn.cursor() as cur:
-        cur.execute("""
-            insert into schema_migrations (version)
-            values ('001_create_cards')
-            on conflict do nothing;
-        """)
-    conn.commit()
+        cur.execute(sql.SQL('set role {}').format(sql.Identifier(role_name)))
 
 
 def get_applied_versions(conn: psycopg.Connection) -> set[str]:
@@ -35,14 +31,14 @@ def get_applied_versions(conn: psycopg.Connection) -> set[str]:
 
 
 def apply_sql_file(cur: psycopg.Cursor, sql_path: Path) -> None:
-    sql = sql_path.read_text(encoding='utf-8')
-    cur.execute(sql)
+    cur.execute(sql_path.read_text(encoding='utf-8'))
 
 
-def apply_migrations(conn: psycopg.Connection) -> None:
+def apply_migrations(conn: psycopg.Connection, db_owner: str | None) -> None:
+    if db_owner is not None:
+        set_role(conn, db_owner)
     migrations_dir = Path(__file__).with_name('migrations')
     ensure_migrations_table(conn)
-    bootstrap_initial_version(conn)
     applied = get_applied_versions(conn)
     pending = sorted(
         (p for p in migrations_dir.glob('*.sql') if p.stem not in applied),
@@ -69,7 +65,7 @@ def main() -> None:
     cfg = parse_config(sections=[Sections.DB], require_db=True)
     try:
         with psycopg.connect(cfg.db_conn_string) as conn:
-            apply_migrations(conn)
+            apply_migrations(conn, cfg.db_owner)
             print('Migration completed successfully')
     except Exception as e:
         print(f'Migration failed: {e}')

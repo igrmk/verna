@@ -30,8 +30,8 @@ def send_telegram_message(
     bot_token: str,
     chat_id: str,
 ) -> None:
-    url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    data = {"chat_id": chat_id, "text": text, "disable_web_page_preview": True}
+    url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
+    data = {'chat_id': chat_id, 'text': text, 'disable_web_page_preview': True}
     resp = requests.post(url, data=data, timeout=15)
     resp.raise_for_status()
 
@@ -87,7 +87,7 @@ def format_card(idx: int, card: Card) -> str:
         lines.append(f'PAST PARTICIPLE: {card.past_participle}')
     for t in card.translations:
         lines.append(f'  - {t}')
-    return "\n".join(lines)
+    return '\n'.join(lines)
 
 
 INSTRUCTIONS = textwrap.dedent("""
@@ -102,7 +102,10 @@ INSTRUCTIONS = textwrap.dedent("""
 
 
 def main() -> None:
-    parser = get_parser(sections=[Sections.DB, Sections.TELEGRAM, Sections.RANDOM, Sections.OPENAI], require_db=True)
+    parser = get_parser(
+        sections=[Sections.DB, Sections.TELEGRAM, Sections.RANDOM, Sections.OPENAI],
+        require_db=True,
+    )
     cfg = parser.parse_args()
 
     if cfg.print_config:
@@ -143,7 +146,7 @@ def main() -> None:
     )
 
     if resp.output_parsed is None:
-        raise SystemExit("OpenAI response could not be parsed")
+        raise SystemExit('OpenAI response could not be parsed')
 
     data: Passage = resp.output_parsed
 
