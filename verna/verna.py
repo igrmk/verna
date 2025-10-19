@@ -275,11 +275,13 @@ def main() -> None:
         raise no_query_error
 
     client = OpenAI(api_key=cfg.openai_api_key)
-
+    instructions = INSTRUCTIONS.substitute({'WORD_COUNT': len(query.split())})
+    if cfg.debug:
+        print(f'INSTRUCTIONS:\n{instructions}')
     resp = client.responses.parse(
         model='gpt-5',
         reasoning={'effort': 'minimal'},
-        instructions=INSTRUCTIONS.substitute({'WORD_COUNT': len(query.split())}),
+        instructions=instructions,
         input=query,
         text_format=TranslatorResponse,
     )
