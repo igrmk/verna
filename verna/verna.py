@@ -208,7 +208,8 @@ def save_cards(cfg, entries: list[DictEntry]) -> None:
                                     from unnest(excluded.translations) as x
                                     where not x = any(cards.translations)
                                 )
-                            )
+                            ),
+                            context_sentence = coalesce(excluded.context_sentence, cards.context_sentence)
                             returning (xmax = 0) as inserted;
                         """,
                         (
