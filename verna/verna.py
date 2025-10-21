@@ -29,7 +29,7 @@ class Language(UpperStrEnum):
 class Lexeme(BaseModel):
     text: str
     language: Language
-    rp: str | None = None
+    rp: list[str] = Field(default_factory=list)
     base_form: str | None = None
     past_simple: str | None = None
     past_participle: str | None = None
@@ -99,7 +99,7 @@ INSTRUCTIONS = Template(
         `Lexeme` filling rules (for the current lexeme L):
           - `text` — required
           - `language` — required
-          - `rp` — British RP transcription without slashes, only if L is in English
+          - `rp` — British RP transcriptions without slashes, only if L is in English
           - `base_form` — only if Q is in English and L is a word not in its base form
           - `past_simple` and `past_participle` — only if Q is in English and L is an irregular word
     """).strip()
@@ -113,7 +113,7 @@ def format_word(prefix: str, lex: Lexeme) -> str:
         parts.append(f'{prefix}{s}')
 
     if lex.text and lex.rp:
-        append_prefixed(f'* {lex.text} /{lex.rp}/')
+        append_prefixed(f'* {lex.text} {", ".join(f"/{rp}/" for rp in lex.rp)}')
     elif lex.text:
         append_prefixed(f'* {lex.text}')
     if lex.base_form:
@@ -201,15 +201,16 @@ def save_cards(cfg, entries: list[DictEntry]) -> None:
                                 context_sentence
                             )
                             values (%s, %s, %s, %s, %s, %s, %s)
-                            on conflict (lower(lexeme)) do update
-                            set translations = cards.translations || (
-                                select array(
-                                    select x
-                                    from unnest(excluded.translations) as x
-                                    where not x = any(cards.translations)
-                                )
-                            ),
-                            context_sentence = coalesce(excluded.context_sentence, cards.context_sentence)
+                            on conflict (lower(lexeme)) do update set
+                                translations = (
+                                    select array_agg(distinct x)
+                                    from unnest(cards.translations || excluded.translations) as x
+                                ),
+                                rp = (
+                                    select array_agg(distinct x)
+                                    from unnest(cards.rp || excluded.rp) as x
+                                ),
+                                context_sentence = coalesce(excluded.context_sentence, cards.context_sentence)
                             returning (xmax = 0) as inserted;
                         """,
                         (
@@ -224,11 +225,8 @@ def save_cards(cfg, entries: list[DictEntry]) -> None:
                     )
                     row = cur.fetchone()
                     assert row is not None
-                    inserted = [0]
-                    if not inserted:
-                        print('Merged translations')
-                    else:
-                        print('Saved')
+                    inserted = row[0]
+                    print('Saved' if inserted else 'Merged')
                 conn.commit()
         except psycopg.Error as e:
             print(f'Failed to save cards to postgres: {e}')

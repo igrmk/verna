@@ -13,7 +13,7 @@ from verna.config import get_parser, Sections, print_config
 @dataclass
 class Card:
     lexeme: str
-    rp: str | None
+    rp: list[str]
     past_simple: str | None
     past_participle: str | None
     translations: list[str]
@@ -81,7 +81,7 @@ def fetch_random_cards(conn, limit: int) -> list[Card]:
 
 def format_card(idx: int, card: Card) -> str:
     lines: list[str] = []
-    header = f'[{idx}] {card.lexeme} /{card.rp}/' if card.rp else f'[{idx}] {card.lexeme}'
+    header = f'[{idx}] {card.lexeme} {", ".join(f"/{rp}/" for rp in card.rp)}' if card.rp else f'[{idx}] {card.lexeme}'
     lines.append(header)
     if card.past_simple:
         lines.append(f'PAST SIMPLE: {card.past_simple}')
