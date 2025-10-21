@@ -73,8 +73,8 @@ INSTRUCTIONS = Template(
           - UK-only spelling variants
 
         Fill `mode` to:
-          - `LEXEME`, if both of the following are true:
-            - Q is a single word, a fixed phraseme, or a short everyday sentence
+          - `LEXEME`, only if both of the following are true:
+            - Q is a single word, a fixed phraseme, or a short, commonly used sentence
             - WORD_COUNT(Q) ≤ 5
           - `TEXT`, otherwise
 
