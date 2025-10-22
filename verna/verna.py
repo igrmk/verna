@@ -84,7 +84,7 @@ INSTRUCTIONS = Template(
         Otherwise, if `mode` = `TEXT`, fill the root fields:
           - `translation` — to Russian if Q is in English, or to English if Q is in Russian
           - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 5
-          - `dict_entries` — list all advanced English lexemes (B2+) in Q.
+          - `dict_entries` — list all English lexemes at the level ${LEVEL} or higher in Q.
             Don't list beginner-level lexemes and proper names.
             Fill each entry according to the `DictEntry` filling rules.
             Treat different forms (e.g., verb and noun) as one lexeme
@@ -280,7 +280,10 @@ def main() -> None:
         raise no_query_error
 
     client = OpenAI(api_key=cfg.openai_api_key)
-    instructions = INSTRUCTIONS.substitute({'WORD_COUNT': len(query.split())})
+    instructions = INSTRUCTIONS.substitute({
+        'WORD_COUNT': len(query.split()),
+        'LEVEL': cfg.level,
+    })
     if cfg.debug:
         print(f'INSTRUCTIONS:\n{instructions}\n')
     resp = client.responses.parse(

@@ -23,6 +23,15 @@ class ThinkLevel(StrEnum):
     HIGH = 'high'
 
 
+class CefrLevel(StrEnum):
+    A1 = 'A1'
+    A2 = 'A2'
+    B1 = 'B1'
+    B2 = 'B2'
+    C1 = 'C1'
+    C2 = 'C2'
+
+
 def _add_common(p: configargparse.ArgParser) -> None:
     p.add_argument(
         '--config',
@@ -119,6 +128,13 @@ def _add_verna(p: configargparse.ArgParser) -> None:
         action=argparse.BooleanOptionalAction,
         help='show JSON schema and exit',
         default=False,
+    )
+    p.add_argument(
+        '--level',
+        type=CefrLevel,
+        metavar='LEVEL',
+        required=True,
+        help='save lexemes at the specified level or higher',
     )
 
 
