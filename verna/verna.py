@@ -84,7 +84,7 @@ INSTRUCTIONS = Template(
         Otherwise, if `mode` = `TEXT`, fill the root fields:
           - `translation` — to Russian if Q is in English, or to English if Q is in Russian
           - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 5
-          - `dict_entries` — list all advanced English lexemes (C1+) in Q.
+          - `dict_entries` — list all advanced English lexemes (B2+) in Q.
             Don't list beginner-level lexemes and proper names.
             Fill each entry according to the `DictEntry` filling rules.
             Treat different forms (e.g., verb and noun) as one lexeme
@@ -95,6 +95,7 @@ INSTRUCTIONS = Template(
             including those outside Q's context, following the `Lexeme` filling rules
           - Fill `E.context_sentence` with the full sentence where the lexeme occurs in Q,
             correcting grammar and spelling beforehand;
+            ensure the sentence ends with full stop;
             don't correct contractions;
             leave the lexeme as is where possible;
             set to null if unavailable
@@ -284,7 +285,7 @@ def main() -> None:
         print(f'INSTRUCTIONS:\n{instructions}\n')
     resp = client.responses.parse(
         model='gpt-5',
-        reasoning={'effort': 'minimal'},
+        reasoning={'effort': cfg.think},
         instructions=instructions,
         input=query,
         text_format=TranslatorResponse,

@@ -16,6 +16,13 @@ class Sections(StrEnum):
     OPENAI = 'openai'
 
 
+class ThinkLevel(StrEnum):
+    MINIMAL = 'minimal'
+    LOW = 'low'
+    MEDIUM = 'medium'
+    HIGH = 'high'
+
+
 def _add_common(p: configargparse.ArgParser) -> None:
     p.add_argument(
         '--config',
@@ -40,7 +47,7 @@ def _add_common(p: configargparse.ArgParser) -> None:
 def _add_db(p: configargparse.ArgParser, *, require_db: bool) -> None:
     p.add_argument(
         '--db-conn-string',
-        env_var='DB_CONN_STRING',
+        env_var='VERNA_DB_CONN_STRING',
         type=str,
         required=require_db,
         metavar='STR',
@@ -48,7 +55,7 @@ def _add_db(p: configargparse.ArgParser, *, require_db: bool) -> None:
     )
     p.add_argument(
         '--db-owner',
-        env_var='DB_OWNER',
+        env_var='VERNA_DB_OWNER',
         type=str,
         metavar='STR',
         help='PostgreSQL database owner',
@@ -63,25 +70,34 @@ def _add_openai(p: configargparse.ArgParser) -> None:
         required=True,
         help='OpenAI API key',
     )
+    p.add_argument(
+        '--think',
+        env_var='VERNA_THINK',
+        nargs='?',
+        const=ThinkLevel.MEDIUM,
+        type=ThinkLevel,
+        required=True,
+        help='Make OpenAI think',
+    )
 
 
 def _add_tg(p: configargparse.ArgParser, *, require_tg: bool) -> None:
     p.add_argument(
         '--send-to-tg',
-        env_var='SEND_TO_TG',
+        env_var='VERNA_SEND_TO_TG',
         action=argparse.BooleanOptionalAction,
         required=True,
         help='send output to Telegram',
     )
     p.add_argument(
         '--tg-bot-token',
-        env_var='TG_BOT_TOKEN',
+        env_var='VERNA_TG_BOT_TOKEN',
         required=require_tg,
         help='Telegram bot token',
     )
     p.add_argument(
         '--tg-chat-id',
-        env_var='TG_CHAT_ID',
+        env_var='VERNA_TG_CHAT_ID',
         required=require_tg,
         help='Telegram chat ID',
     )

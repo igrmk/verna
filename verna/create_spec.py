@@ -32,9 +32,9 @@ def main() -> None:
 
     secrets = {
         'OPENAI_API_KEY': cfg.openai_api_key,
-        'TG_BOT_TOKEN': cfg.tg_bot_token,
-        'TG_CHAT_ID': cfg.tg_chat_id,
-        'DB_CONN_STRING': cfg.db_conn_string,
+        'VERNA_TG_BOT_TOKEN': cfg.tg_bot_token,
+        'VERNA_TG_CHAT_ID': cfg.tg_chat_id,
+        'VERNA_DB_CONN_STRING': cfg.db_conn_string,
     }
 
     jobs = data.get('jobs', [])

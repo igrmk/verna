@@ -18,6 +18,9 @@ jobs:
   instance_count: 1
   instance_size_slug: apps-s-1vcpu-0.5gb
   envs:
-  - key: SEND_TO_TG
+  - key: VERNA_SEND_TO_TG
     value: 'true'
+    scope: RUN_TIME
+  - key: VERNA_THINK
+    value: 'high'
     scope: RUN_TIME
