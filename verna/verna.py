@@ -96,6 +96,7 @@ INSTRUCTIONS = Template(
           - Fill `E.context_sentence` with the full sentence where the lexeme occurs in Q,
             correcting grammar and spelling beforehand;
             don't correct contractions;
+            leave the lexeme as is where possible;
             set to null if unavailable
 
         `Lexeme` filling rules (for the current lexeme L):
