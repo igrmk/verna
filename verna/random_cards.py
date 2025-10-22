@@ -17,7 +17,7 @@ class Card:
     past_simple: str | None
     past_participle: str | None
     translations: list[str]
-    context_sentence: str | None
+    context_sentence: list[str]
 
 
 class Passage(BaseModel):
@@ -87,10 +87,12 @@ def format_card(idx: int, card: Card) -> str:
         lines.append(f'PAST SIMPLE: {card.past_simple}')
     if card.past_participle:
         lines.append(f'PAST PARTICIPLE: {card.past_participle}')
-    for t in card.translations:
-        lines.append(f'  - {t}')
-    if card.context_sentence:
-        lines.append(f'EXAMPLE:\n{card.context_sentence}')
+    for x in card.translations:
+        lines.append(f'  - {x}')
+    if len(card.context_sentence) > 0:
+        lines.append('EXAMPLES:')
+        for x in card.context_sentence:
+            lines.append(x)
     return '\n'.join(lines)
 
 

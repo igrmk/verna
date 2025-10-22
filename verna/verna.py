@@ -210,7 +210,10 @@ def save_cards(cfg, entries: list[DictEntry]) -> None:
                                     select array_agg(distinct x)
                                     from unnest(cards.rp || excluded.rp) as x
                                 ),
-                                context_sentence = coalesce(excluded.context_sentence, cards.context_sentence)
+                                context_sentence = (
+                                    select array_agg(distinct x)
+                                    from unnest(cards.context_sentence || excluded.context_sentence) as x
+                                )
                             returning (xmax = 0) as inserted;
                         """,
                         (
@@ -220,7 +223,7 @@ def save_cards(cfg, entries: list[DictEntry]) -> None:
                             e.lexeme.past_simple,
                             e.lexeme.past_participle,
                             translations,
-                            e.context_sentence,
+                            [e.context_sentence],
                         ),
                     )
                     row = cur.fetchone()
