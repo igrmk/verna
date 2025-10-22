@@ -95,7 +95,7 @@ INSTRUCTIONS = Template(
             including those outside Q's context, following the `Lexeme` filling rules
           - Fill `E.context_sentence` with the full sentence where the lexeme occurs in Q,
             correcting grammar and spelling beforehand;
-            ensure the sentence ends with full stop;
+            ensure the sentence ends with appropriate punctuation;
             don't correct contractions;
             leave the lexeme as is where possible;
             set to null if unavailable
