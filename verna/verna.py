@@ -93,8 +93,10 @@ INSTRUCTIONS = Template(
           - Fill `E.lexeme` according to the `Lexeme` filling rules
           - Fill `E.translations` with an exhaustive list of translations,
             including those outside Q's context, following the `Lexeme` filling rules
-          - Fill `E.context_sentence` with the full sentence where the lexeme is used in Q,
-            correcting grammar and spelling beforehand; set to null if unavailable
+          - Fill `E.context_sentence` with the full sentence where the lexeme occurs in Q,
+            correcting grammar and spelling beforehand;
+            don't correct contractions;
+            set to null if unavailable
 
         `Lexeme` filling rules (for the current lexeme L):
           - `text` — required
