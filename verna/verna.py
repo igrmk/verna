@@ -288,7 +288,7 @@ def main() -> None:
         print(f'INSTRUCTIONS:\n{instructions}\n')
     resp = client.responses.parse(
         model='gpt-5',
-        reasoning={'effort': cfg.think},
+        reasoning={'effort': cfg.reason},
         instructions=instructions,
         input=query,
         text_format=TranslatorResponse,

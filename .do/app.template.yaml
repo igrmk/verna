@@ -21,6 +21,6 @@ jobs:
   - key: VERNA_SEND_TO_TG
     value: 'true'
     scope: RUN_TIME
-  - key: VERNA_THINK
+  - key: VERNA_REASON
     value: 'high'
     scope: RUN_TIME

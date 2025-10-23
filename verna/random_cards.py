@@ -145,7 +145,7 @@ def main() -> None:
 
     resp = client.responses.parse(
         model='gpt-5',
-        reasoning={'effort': cfg.think},
+        reasoning={'effort': cfg.reason},
         instructions=INSTRUCTIONS,
         input=request_text,
         text_format=Passage,

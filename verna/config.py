@@ -16,7 +16,7 @@ class Sections(StrEnum):
     OPENAI = 'openai'
 
 
-class ThinkLevel(StrEnum):
+class ReasoningLevel(StrEnum):
     MINIMAL = 'minimal'
     LOW = 'low'
     MEDIUM = 'medium'
@@ -79,15 +79,21 @@ def _add_openai(p: configargparse.ArgParser) -> None:
         required=True,
         help='OpenAI API key',
     )
-    p.add_argument(
+    reason_group = p.add_mutually_exclusive_group(required=False)
+    reason_group.add_argument(
+        '--reason',
+        env_var='VERNA_REASON',
+        type=ReasoningLevel,
+        help='OpenAI reasoning effort',
+    )
+    reason_group.add_argument(
         '--think',
-        env_var='VERNA_THINK',
-        nargs='?',
-        const=ThinkLevel.MEDIUM,
-        type=ThinkLevel,
-        required=True,
+        dest='reason',
+        action='store_const',
+        const=ReasoningLevel.MEDIUM,
         help='Make OpenAI think',
     )
+    p.set_defaults(reason=ReasoningLevel.MINIMAL)
 
 
 def _add_tg(p: configargparse.ArgParser, *, require_tg: bool) -> None:
