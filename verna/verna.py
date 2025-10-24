@@ -85,6 +85,7 @@ INSTRUCTIONS = Template(
           - `translation` — to Russian if Q is in English, or to English if Q is in Russian
           - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 5
           - `dict_entries` — list all English lexemes at the level ${LEVEL} or higher in Q.
+            Prefer longer lexemes such as phrasal verbs or phrasemes when available.
             Don't list beginner-level lexemes and proper names.
             Fill each entry according to the `DictEntry` filling rules.
             Treat different forms (e.g., verb and noun) as one lexeme
