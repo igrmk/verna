@@ -227,7 +227,7 @@ def save_cards(cfg, entries: list[DictEntry]) -> None:
                             e.lexeme.past_simple,
                             e.lexeme.past_participle,
                             translations,
-                            [e.context_sentence],
+                            [e.context_sentence] if e.context_sentence is not None else [],
                         ),
                     )
                     row = cur.fetchone()
