@@ -104,7 +104,7 @@ INSTRUCTIONS = Template(
         `Lexeme` filling rules (for the current lexeme L):
           - `text` — required
           - `language` — required
-          - `rp` — British RP transcriptions without slashes, only if L is in English
+          - `rp` — list of possible British RP transcription of L, without slashes, only if L is English
           - `base_form` — only if Q is in English and L is a word not in its base form
           - `past_simple` and `past_participle` — only if Q is in English and L is an irregular word
     """).strip()
