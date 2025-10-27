@@ -2,22 +2,12 @@ import sys
 import psycopg
 import textwrap
 import requests
-from dataclasses import dataclass
+import verna.db_types as db_types
 
 from openai import OpenAI
 from pydantic import BaseModel
 
 from verna.config import get_parser, Sections, print_config
-
-
-@dataclass
-class Card:
-    lexeme: str
-    rp: list[str]
-    past_simple: str | None
-    past_participle: str | None
-    translations: list[str]
-    context_sentence: list[str]
 
 
 class Passage(BaseModel):
@@ -54,7 +44,7 @@ def send_to_telegram_all(
         send_telegram_message(russian.strip(), bot_token=bot_token, chat_id=chat_id)
 
 
-def fetch_random_cards(conn, limit: int) -> list[Card]:
+def fetch_random_cards(conn, limit: int) -> list[db_types.Card]:
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -67,9 +57,10 @@ def fetch_random_cards(conn, limit: int) -> list[Card]:
         )
         rows = cur.fetchall()
         return [
-            Card(
+            db_types.Card(
                 lexeme=row[0],
                 rp=row[1],
+                base_form=None,
                 past_simple=row[2],
                 past_participle=row[3],
                 translations=row[4],
@@ -77,23 +68,6 @@ def fetch_random_cards(conn, limit: int) -> list[Card]:
             )
             for row in rows
         ]
-
-
-def format_card(idx: int, card: Card) -> str:
-    lines: list[str] = []
-    header = f'[{idx}] {card.lexeme} {", ".join(f"/{rp}/" for rp in card.rp)}' if card.rp else f'[{idx}] {card.lexeme}'
-    lines.append(header)
-    if card.past_simple:
-        lines.append(f'PAST SIMPLE: {card.past_simple}')
-    if card.past_participle:
-        lines.append(f'PAST PARTICIPLE: {card.past_participle}')
-    for x in card.translations:
-        lines.append(f'  - {x}')
-    if len(card.context_sentence) > 0:
-        lines.append('EXAMPLES:')
-        for x in card.context_sentence:
-            lines.append(x)
-    return '\n'.join(lines)
 
 
 INSTRUCTIONS = textwrap.dedent("""
@@ -131,13 +105,13 @@ def main() -> None:
     tg_card_messages: list[str] = []
     for idx, card in enumerate(cards, 1):
         print()
-        card_text = format_card(idx, card)
+        card_text = f'[{idx}] {db_types.format_card(card)}'
         print(card_text)
         tg_card_messages.append(card_text)
 
     client = OpenAI(api_key=cfg.openai_api_key)
 
-    lexeme_list = '\n'.join(f'[{idx}] {c.lexeme}' for idx, c in enumerate(cards, 1))
+    lexeme_list = '\n'.join(f'[{idx}] {card.lexeme}' for idx, card in enumerate(cards, 1))
     request_text = textwrap.dedent(f"""
         Lexemes to use (any sensible form):
         {lexeme_list}

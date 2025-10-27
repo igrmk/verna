@@ -2,6 +2,7 @@ import json
 import sys
 import textwrap
 import argparse
+import verna.db_types as db_types
 from enum import Enum, auto
 from string import Template
 
@@ -35,7 +36,7 @@ class Lexeme(BaseModel):
     past_participle: str | None = None
 
 
-class DictEntry(BaseModel):
+class Card(BaseModel):
     lexeme: Lexeme
     translations: list[Lexeme]
     context_sentence: str | None
@@ -47,7 +48,7 @@ class TranslatorResponse(BaseModel):
     typo_note: str | None = None
     rp: str | None = None
     translation: str | None = None
-    dict_entries: list[DictEntry] = Field(default_factory=list)
+    cards: list[Card] = Field(default_factory=list)
 
 
 INSTRUCTIONS = Template(
@@ -78,23 +79,23 @@ INSTRUCTIONS = Template(
             - WORD_COUNT(Q) ≤ 5
           - `TEXT`, otherwise
 
-        If `mode` = `LEXEME`, add Q in full to `dict_entries` as a single entry,
-        filling it according to the `DictEntry` filling rules. Omit other root fields.
+        If `mode` = `LEXEME`, add Q in full to `cards` as a single entry,
+        filling it according to the `Card` filling rules. Omit other root fields.
 
         Otherwise, if `mode` = `TEXT`, fill the root fields:
           - `translation` — to Russian if Q is in English, or to English if Q is in Russian
           - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 5
-          - `dict_entries` — list all English lexemes at the level ${LEVEL} or higher in Q.
+          - `cards` — list all English lexemes at the level ${LEVEL} or higher in Q.
             Prefer longer lexemes such as phrasal verbs or phrasemes when available.
-            Don't list beginner-level lexemes and proper names.
-            Fill each entry according to the `DictEntry` filling rules.
+            Don't list proper names.
+            Fill each card according to the `Card` filling rules.
             Treat different forms (e.g., verb and noun) as one lexeme
 
-        `DictEntry` filling rules (for the current entry E):
-          - Fill `E.lexeme` according to the `Lexeme` filling rules
-          - Fill `E.translations` with an exhaustive list of translations,
+        `Card` filling rules (for the current card C):
+          - Fill `C.lexeme` according to the `Lexeme` filling rules
+          - Fill `C.translations` with an exhaustive list of translations,
             including those outside Q's context, following the `Lexeme` filling rules
-          - Fill `E.context_sentence` with the full sentence where the lexeme occurs in Q,
+          - Fill `C.context_sentence` with the full sentence where the lexeme occurs in Q,
             correcting grammar and spelling beforehand;
             ensure the sentence ends with appropriate punctuation;
             don't correct contractions;
@@ -118,28 +119,26 @@ def format_word(prefix: str, lex: Lexeme) -> str:
         parts.append(f'{prefix}{s}')
 
     if lex.text and lex.rp:
-        append_prefixed(f'* {lex.text} {", ".join(f"/{rp}/" for rp in lex.rp)}')
+        append_prefixed(f'{lex.text} {", ".join(f"/{rp}/" for rp in lex.rp)}')
     elif lex.text:
-        append_prefixed(f'* {lex.text}')
+        append_prefixed(f'{lex.text}')
     if lex.base_form:
-        append_prefixed(f'BASE FORM: {lex.base_form}')
+        append_prefixed(f'  BASE FORM: {lex.base_form}')
     if lex.past_simple:
-        append_prefixed(f'PAST SIMPLE: {lex.past_simple}')
+        append_prefixed(f'  PAST SIMPLE: {lex.past_simple}')
     if lex.past_participle:
-        append_prefixed(f'PAST PARTICIPLE: {lex.past_participle}')
+        append_prefixed(f'  PAST PARTICIPLE: {lex.past_participle}')
     return '\n'.join(parts)
 
 
-def format_dict_entry(e: DictEntry) -> str:
+def format_card(card: Card) -> str:
     parts = []
-    parts.append(format_word('', e.lexeme))
-    if e.translations:
-        parts.append('TRANSLATIONS:')
-        for t in e.translations:
-            parts.append(format_word('  ', t))
-    if e.context_sentence is not None:
-        parts.append('EXAMPLE:')
-        parts.append(e.context_sentence)
+    parts.append(format_word('', card.lexeme))
+    if card.translations:
+        for t in card.translations:
+            parts.append(format_word('  - ', t))
+    if card.context_sentence is not None:
+        parts.append(f'\n  > {card.context_sentence}')
     return '\n'.join(parts)
 
 
@@ -154,9 +153,9 @@ def print_response(cfg: argparse.Namespace, r: TranslatorResponse) -> None:
     if r.rp:
         parts.append(f'/{r.rp}/')
     if r.translation:
-        parts.append(f'TRANSLATION:\n{r.translation}')
-    for e in r.dict_entries:
-        parts.append(format_dict_entry(e))
+        parts.append(r.translation)
+    for idx, card in enumerate(r.cards, 1):
+        parts.append(f'[{idx}] {format_card(card)}')
     print('\n\n'.join(parts))
 
 
@@ -181,16 +180,29 @@ def confirm(prompt: str) -> ConfirmResult:
         print('Please enter y, n, or q')
 
 
-def save_cards(cfg, entries: list[DictEntry]) -> None:
-    print()
-    for e in entries:
-        res = confirm(f'Save "{e.lexeme.text}"?')
+def to_db_card(card) -> db_types.Card:
+    return db_types.Card(
+        lexeme=card.lexeme.text.strip(),
+        rp=card.lexeme.rp,
+        base_form=card.lexeme.base_form,
+        past_simple=card.lexeme.past_simple,
+        past_participle=card.lexeme.past_participle,
+        translations=[t.text.strip() for t in card.translations],
+        context_sentence=[card.context_sentence] if card.context_sentence is not None else [],
+    )
+
+
+def save_cards(cfg, cards: list[db_types.Card]) -> None:
+    for idx, card in enumerate(cards, 1):
+        print()
+        print(f'[{idx}] {db_types.format_card(card)}')
+        print()
+        res = confirm('Save?')
         if res == ConfirmResult.QUIT:
             print('Skipping remaining cards')
             break
         if res == ConfirmResult.NO:
             continue
-        translations = [t.text.strip() for t in e.translations]
         try:
             with psycopg.connect(cfg.db_conn_string) as conn:
                 with conn.cursor() as cur:
@@ -222,13 +234,13 @@ def save_cards(cfg, entries: list[DictEntry]) -> None:
                             returning (xmax = 0) as inserted;
                         """,
                         (
-                            e.lexeme.text.strip(),
-                            e.lexeme.rp,
-                            e.lexeme.base_form,
-                            e.lexeme.past_simple,
-                            e.lexeme.past_participle,
-                            translations,
-                            [e.context_sentence] if e.context_sentence is not None else [],
+                            card.lexeme,
+                            card.rp,
+                            card.base_form,
+                            card.past_simple,
+                            card.past_participle,
+                            card.translations,
+                            card.context_sentence,
                         ),
                     )
                     row = cur.fetchone()
@@ -281,10 +293,12 @@ def main() -> None:
         raise no_query_error
 
     client = OpenAI(api_key=cfg.openai_api_key)
-    instructions = INSTRUCTIONS.substitute({
-        'WORD_COUNT': len(query.split()),
-        'LEVEL': cfg.level,
-    })
+    instructions = INSTRUCTIONS.substitute(
+        {
+            'WORD_COUNT': len(query.split()),
+            'LEVEL': cfg.level,
+        }
+    )
     if cfg.debug:
         print(f'INSTRUCTIONS:\n{instructions}\n')
     resp = client.responses.parse(
@@ -301,9 +315,10 @@ def main() -> None:
     data: TranslatorResponse = resp.output_parsed
     print_response(cfg, data)
 
-    english_entries = [e for e in data.dict_entries if e.lexeme.language == Language.ENGLISH]
-    if sys.stdin.isatty() and english_entries and cfg.db_conn_string:
-        save_cards(cfg, english_entries)
+    english_cards = [to_db_card(x) for x in data.cards if x.lexeme.language == Language.ENGLISH]
+    if sys.stdin.isatty() and english_cards and cfg.db_conn_string:
+        print('\nSAVING CARDS')
+        save_cards(cfg, english_cards)
 
 
 if __name__ == '__main__':
