@@ -208,15 +208,15 @@ def save_cards(cfg, entries: list[DictEntry]) -> None:
                             values (%s, %s, %s, %s, %s, %s, %s)
                             on conflict (lower(lexeme)) do update set
                                 translations = (
-                                    select array_agg(distinct x)
+                                    select coalesce(array_agg(distinct x), '{}')
                                     from unnest(cards.translations || excluded.translations) as x
                                 ),
                                 rp = (
-                                    select array_agg(distinct x)
+                                    select coalesce(array_agg(distinct x), '{}')
                                     from unnest(cards.rp || excluded.rp) as x
                                 ),
                                 context_sentence = (
-                                    select array_agg(distinct x)
+                                    select coalesce(array_agg(distinct x), '{}')
                                     from unnest(cards.context_sentence || excluded.context_sentence) as x
                                 )
                             returning (xmax = 0) as inserted;
