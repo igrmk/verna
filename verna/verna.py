@@ -75,7 +75,7 @@ INSTRUCTIONS = Template(
 
         Fill `mode` to:
           - `LEXEME`, only if both of the following are true:
-            - Q is a single word, a fixed phraseme, or a short, idiomatic sentence
+            - Q is a single word, a fixed phraseme, or a short, idiomatic, highly common sentence
             - WORD_COUNT(Q) ≤ 5
           - `TEXT`, otherwise
 
