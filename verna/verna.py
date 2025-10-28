@@ -2,7 +2,7 @@ import json
 import sys
 import textwrap
 import argparse
-import verna.db_types as db_types
+from verna import db_types
 from enum import Enum, auto
 from string import Template
 

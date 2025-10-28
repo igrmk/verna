@@ -2,7 +2,7 @@ import sys
 import psycopg
 import textwrap
 import requests
-import verna.db_types as db_types
+from verna import db_types
 
 from openai import OpenAI
 from pydantic import BaseModel
