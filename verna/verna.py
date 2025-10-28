@@ -75,7 +75,7 @@ INSTRUCTIONS = Template(
 
         Fill `mode` to:
           - `LEXEME`, only if both of the following are true:
-            - Q is a single word, a fixed phraseme, or a short, commonly used sentence
+            - Q is a single word, a fixed phraseme, or a short, idiomatic sentence
             - WORD_COUNT(Q) ≤ 5
           - `TEXT`, otherwise
 
@@ -97,7 +97,7 @@ INSTRUCTIONS = Template(
             including those outside Q's context, following the `Lexeme` filling rules
           - Fill `C.context_sentence` with the full sentence where the lexeme occurs in Q,
             correcting grammar and spelling beforehand;
-            ensure the sentence ends with appropriate punctuation;
+            ensure proper sentence capitalization and punctuation;
             don't correct contractions;
             leave the lexeme as is where possible;
             set to null if unavailable
