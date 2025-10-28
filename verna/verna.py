@@ -86,8 +86,8 @@ INSTRUCTIONS = Template(
           - `translation` — to Russian if Q is in English, or to English if Q is in Russian
           - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 5
           - `cards` — list all English lexemes at the level ${LEVEL} or higher in Q.
-            Prefer longer lexemes such as phrasal verbs or phrasemes when available.
-            Don't list proper names.
+            Extract longer lexemes such as phrasal verbs or phrasemes instead of single words when available.
+            Exclude proper names.
             Fill each card according to the `Card` filling rules.
             Treat different forms (e.g., verb and noun) as one lexeme
 
