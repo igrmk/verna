@@ -16,6 +16,7 @@ dependencies = [
   'platformdirs==4.4.0',
   'prompt_toolkit==3.0.52',
   'pydantic==2.11.9',
+  'rich==14.2.0',
 ]
 authors = [
   { name = 'igrmk' }

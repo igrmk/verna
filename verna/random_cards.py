@@ -2,12 +2,15 @@ import sys
 import psycopg
 import textwrap
 import requests
+from rich.console import Console
 from verna import db_types
 
 from openai import OpenAI
 from pydantic import BaseModel
 
 from verna.config import get_parser, Sections, print_config
+
+CON = Console()
 
 
 class Passage(BaseModel):
@@ -99,15 +102,15 @@ def main() -> None:
         cards = fetch_random_cards(conn, cfg.limit)
 
     if not cards:
-        print('No lexemes found in cards')
+        print('No lexemes found in cards', file=sys.stderr)
         return
 
     tg_card_messages: list[str] = []
     for idx, card in enumerate(cards, 1):
-        print()
-        card_text = f'[{idx}] {db_types.format_card(card)}'
-        print(card_text)
-        tg_card_messages.append(card_text)
+        CON.print()
+        card_text = db_types.format_card(card, idx)
+        CON.print(card_text, markup=False)
+        tg_card_messages.append(card_text.plain)
 
     client = OpenAI(api_key=cfg.openai_api_key)
 
@@ -130,12 +133,12 @@ def main() -> None:
 
     data: Passage = resp.output_parsed
 
-    print()
-    print()
-    print(data.english.strip())
-    print()
-    print()
-    print(data.russian.strip())
+    CON.print()
+    CON.print()
+    CON.print(data.english.strip(), markup=False, highlight=False)
+    CON.print()
+    CON.print()
+    CON.print(data.russian.strip(), markup=False)
 
     if cfg.send_to_tg:
         try:

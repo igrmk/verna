@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from rich.text import Text
 
 
 @dataclass
@@ -12,20 +13,36 @@ class Card:
     context_sentence: list[str]
 
 
-def format_card(card: Card) -> str:
-    lines: list[str] = []
-    header = f'{card.lexeme} {", ".join(f"/{rp}/" for rp in card.rp)}' if card.rp else f'{card.lexeme}'
-    lines.append(header)
-    if card.base_form:
-        lines.append(f'  BASE FORM: {card.base_form}')
-    if card.past_simple:
-        lines.append(f'  PAST SIMPLE: {card.past_simple}')
-    if card.past_participle:
-        lines.append(f'  PAST PARTICIPLE: {card.past_participle}')
+def format_card(card: Card, idx: int) -> Text:
+    t = Text()
+    t.append(f'[{idx}]', style='bold')
+    t.append(' ')
+
+    t.append(card.lexeme)
+    for rp in card.rp:
+        t.append(' ')
+        t.append(f'/{rp}/', style='italic')
+
+    def add_kv(k: str, v: str | None) -> None:
+        if v:
+            t.append('\n  ')
+            t.append(f'{k}:', style='dim')
+            t.append(' ')
+            t.append(v)
+
+    add_kv('BASE FORM', card.base_form)
+    add_kv('PAST SIMPLE', card.past_simple)
+    add_kv('PAST PARTICIPLE', card.past_participle)
+
     for x in card.translations:
-        lines.append(f'  - {x}')
-    if len(card.context_sentence) > 0:
-        lines.append('')
-    for x in card.context_sentence:
-        lines.append(f'  > {x}')
-    return '\n'.join(lines)
+        t.append('\n  - ')
+        t.append(x)
+
+    if card.context_sentence:
+        t.append('\n\n  > ')
+        for s in card.context_sentence:
+            t.append(s, style='italic')
+            if s is not card.context_sentence[-1]:
+                t.append('\n  > ')
+
+    return t

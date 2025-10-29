@@ -9,3 +9,4 @@ PyYAML==6.0.3
 types-PyYAML==6.0.12.20250915
 prompt_toolkit==3.0.52
 pydantic==2.11.9
+rich==14.2.0

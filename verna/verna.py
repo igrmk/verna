@@ -15,6 +15,11 @@ from prompt_toolkit.key_binding import KeyBindings
 from verna.upper_str_enum import UpperStrEnum
 from verna.config import get_parser, Sections, print_config
 
+from rich.console import Console
+from rich.text import Text
+
+CON = Console()
+
 
 class Mode(UpperStrEnum):
     LEXEME = auto()
@@ -84,7 +89,7 @@ INSTRUCTIONS = Template(
 
         Otherwise, if `mode` = `TEXT`, fill the root fields:
           - `translation` — to Russian if Q is in English, or to English if Q is in Russian
-          - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 5
+          - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 10
           - `cards` — list all English lexemes at the level ${LEVEL} or higher in Q.
             Extract longer lexemes such as phrasal verbs or phrasemes instead of single words when available.
             Exclude proper names.
@@ -112,51 +117,99 @@ INSTRUCTIONS = Template(
 )
 
 
-def format_word(prefix: str, lex: Lexeme) -> str:
-    parts = []
+def _format_cli_card(card: Card, idx: int) -> Text:
+    t = Text()
+    t.append(f'[{idx}]', style='bold')
+    t.append(' ')
 
-    def append_prefixed(s: str) -> None:
-        parts.append(f'{prefix}{s}')
+    t.append(card.lexeme.text)
+    for rp in card.lexeme.rp:
+        t.append(' ')
+        t.append(f'/{rp}/', style='italic')
 
-    if lex.text and lex.rp:
-        append_prefixed(f'{lex.text} {", ".join(f"/{rp}/" for rp in lex.rp)}')
-    elif lex.text:
-        append_prefixed(f'{lex.text}')
-    if lex.base_form:
-        append_prefixed(f'  BASE FORM: {lex.base_form}')
-    if lex.past_simple:
-        append_prefixed(f'  PAST SIMPLE: {lex.past_simple}')
-    if lex.past_participle:
-        append_prefixed(f'  PAST PARTICIPLE: {lex.past_participle}')
-    return '\n'.join(parts)
+    def add_kv(k: str, v: str | None) -> None:
+        if v:
+            t.append('\n  ')
+            t.append(f'{k}:', style='dim')
+            t.append(' ')
+            t.append(v)
+
+    add_kv('BASE FORM', card.lexeme.base_form)
+    add_kv('PAST SIMPLE', card.lexeme.past_simple)
+    add_kv('PAST PARTICIPLE', card.lexeme.past_participle)
+
+    for x in card.translations:
+        t.append('\n  - ')
+        t.append(x.text)
+        for rp in x.rp:
+            t.append(' ')
+            t.append(f'/{rp}/', style='italic')
+
+    if card.context_sentence:
+        t.append('\n\n  > ')
+        t.append(card.context_sentence, style='italic')
+
+    return t
 
 
-def format_card(card: Card) -> str:
-    parts = []
-    parts.append(format_word('', card.lexeme))
-    if card.translations:
-        for t in card.translations:
-            parts.append(format_word('  - ', t))
-    if card.context_sentence is not None:
-        parts.append(f'\n  > {card.context_sentence}')
-    return '\n'.join(parts)
+def _format_header(cfg: argparse.Namespace, r: TranslatorResponse) -> Text | None:
+    t = Text()
+    first = True
+
+    def add_skip() -> None:
+        nonlocal first
+        if not first:
+            t.append('\n\n')
+        first = False
+
+    def add_kv(k: str, v: str | None) -> None:
+        if v:
+            add_skip()
+            t.append(f'{k}:', style='dim')
+            t.append(' ')
+            t.append(v)
+
+    if cfg.debug and r.mode is not None:
+        add_kv('MODE', r.mode)
+
+    if r.language == Language.OTHER:
+        add_skip()
+        t.append('UNSUPPORTED LANGUAGE')
+
+    add_kv('TYPO NOTE', r.typo_note)
+
+    if r.rp:
+        add_skip()
+        t.append(f'/{r.rp}/', style='italic')
+
+    if r.translation:
+        add_skip()
+        t.append(r.translation)
+
+    return t if not first else None
 
 
 def print_response(cfg: argparse.Namespace, r: TranslatorResponse) -> None:
-    parts = []
-    if cfg.debug:
-        parts.append(f'MODE: {r.mode}')
-    if r.language == Language.OTHER:
-        parts.append('UNSUPPORTED LANGUAGE')
-    if r.typo_note:
-        parts.append(f'TYPO NOTE: {r.typo_note}')
-    if r.rp:
-        parts.append(f'/{r.rp}/')
-    if r.translation:
-        parts.append(r.translation)
+    first = True
+
+    def print_skip() -> None:
+        nonlocal first
+        if not first:
+            CON.print()
+        first = False
+
+    header = _format_header(cfg, r)
+    if header is not None:
+        print_skip()
+        CON.print(header, markup=False)
+
+    if len(r.cards) > 0:
+        print_skip()
+        CON.print('CARDS', style='bold underline')
+
     for idx, card in enumerate(r.cards, 1):
-        parts.append(f'[{idx}] {format_card(card)}')
-    print('\n\n'.join(parts))
+        print_skip()
+        CON.print(_format_cli_card(card, idx), markup=False)
 
 
 class ConfirmResult(Enum):
@@ -177,7 +230,7 @@ def confirm(prompt: str) -> ConfirmResult:
             return ConfirmResult.NO
         if ans == 'q':
             return ConfirmResult.QUIT
-        print('Please enter y, n, or q')
+        CON.print('Please enter y, n, or q')
 
 
 def to_db_card(card) -> db_types.Card:
@@ -194,12 +247,12 @@ def to_db_card(card) -> db_types.Card:
 
 def save_cards(cfg, cards: list[db_types.Card]) -> None:
     for idx, card in enumerate(cards, 1):
-        print()
-        print(f'[{idx}] {db_types.format_card(card)}')
-        print()
+        CON.print()
+        CON.print(db_types.format_card(card, idx), markup=False)
+        CON.print()
         res = confirm('Save?')
         if res == ConfirmResult.QUIT:
-            print('Skipping remaining cards')
+            CON.print('Skipping remaining cards')
             break
         if res == ConfirmResult.NO:
             continue
@@ -246,10 +299,10 @@ def save_cards(cfg, cards: list[db_types.Card]) -> None:
                     row = cur.fetchone()
                     assert row is not None
                     inserted = row[0]
-                    print('Saved' if inserted else 'Merged')
+                    CON.print('Saved' if inserted else 'Merged')
                 conn.commit()
         except psycopg.Error as e:
-            print(f'Failed to save cards to postgres: {e}')
+            print(f'Failed to save cards to postgres: {e}', file=sys.stderr)
             sys.exit(2)
 
 
@@ -277,7 +330,7 @@ def main() -> None:
         sys.exit(0)
 
     if cfg.show_schema:
-        print(json.dumps(TranslatorResponse.model_json_schema(), indent=2))
+        CON.print(json.dumps(TranslatorResponse.model_json_schema(), indent=2))
         sys.exit(0)
 
     query = ' '.join(cfg.query).strip()
@@ -300,7 +353,7 @@ def main() -> None:
         }
     )
     if cfg.debug:
-        print(f'INSTRUCTIONS:\n{instructions}\n')
+        CON.print(f'INSTRUCTIONS:\n{instructions}\n')
     resp = client.responses.parse(
         model='gpt-5',
         reasoning={'effort': cfg.reason},
@@ -317,7 +370,8 @@ def main() -> None:
 
     english_cards = [to_db_card(x) for x in data.cards if x.lexeme.language == Language.ENGLISH]
     if sys.stdin.isatty() and english_cards and cfg.db_conn_string:
-        print('\nSAVING CARDS')
+        CON.print()
+        CON.print('SAVING CARDS', style='bold underline')
         save_cards(cfg, english_cards)
 
 
