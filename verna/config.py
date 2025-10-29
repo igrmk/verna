@@ -84,14 +84,17 @@ def _add_openai(p: configargparse.ArgParser) -> None:
         '--reason',
         env_var='VERNA_REASON',
         type=ReasoningLevel,
+        choices=ReasoningLevel,
         help='OpenAI reasoning effort',
     )
+    default_think_reasoning_level = ReasoningLevel.MEDIUM
     reason_group.add_argument(
+        '-t',
         '--think',
         dest='reason',
         action='store_const',
-        const=ReasoningLevel.MEDIUM,
-        help='Make OpenAI think',
+        const=default_think_reasoning_level,
+        help=f'Make OpenAI think (--reason {default_think_reasoning_level})',
     )
     p.set_defaults(reason=ReasoningLevel.MINIMAL)
 
@@ -136,9 +139,10 @@ def _add_verna(p: configargparse.ArgParser) -> None:
         default=False,
     )
     p.add_argument(
+        '-l',
         '--level',
         type=CefrLevel,
-        metavar='LEVEL',
+        choices=CefrLevel,
         required=True,
         help='save lexemes at the specified level or higher',
     )
