@@ -67,7 +67,7 @@ def _add_db(p: configargparse.ArgParser, *, require_db: bool) -> None:
         env_var='VERNA_DB_OWNER',
         type=str,
         metavar='STR',
-        help='PostgreSQL database owner',
+        help='PostgreSQL database owner (used for migrations)',
     )
 
 
