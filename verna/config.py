@@ -94,7 +94,7 @@ def _add_openai(p: configargparse.ArgParser) -> None:
         dest='reason',
         action='store_const',
         const=default_think_reasoning_level,
-        help=f'Make OpenAI think (--reason {default_think_reasoning_level})',
+        help=f'Make OpenAI think (alias for --reason {default_think_reasoning_level})',
     )
     p.set_defaults(reason=ReasoningLevel.MINIMAL)
 
