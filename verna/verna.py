@@ -90,7 +90,7 @@ INSTRUCTIONS = Template(
         Otherwise, if `mode` = `TEXT`, fill the root fields:
           - `translation` — to Russian if Q is in English, or to English if Q is in Russian
           - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 10
-          - `cards` — list all English lexemes at the level ${LEVEL} or higher in Q.
+          - `cards` — list all English lexemes at the level ${LEVEL} or higher that appear in Q if Q is in English.
             Extract longer lexemes such as phrasal verbs or phrasemes instead of single words when available.
             Exclude proper names.
             Fill each card according to the `Card` filling rules.
