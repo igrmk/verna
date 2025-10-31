@@ -56,9 +56,14 @@ class TranslatorResponse(BaseModel):
     cards: list[Card] = Field(default_factory=list)
 
 
-INSTRUCTIONS = Template(
+class ExampleResponse(BaseModel):
+    example: str | None
+
+
+TRANSLATION_INSTRUCTIONS = Template(
     textwrap.dedent("""
-        You are a translator and dictionary. Swear words are allowed when necessary.
+        You are a translator and dictionary.
+        Swear words are allowed when necessary.
         Informal language is allowed as well.
         Do not explain your actions. Output ONLY JSON matching the schema.
         Between UK and US variants, choose UK.
@@ -115,6 +120,21 @@ INSTRUCTIONS = Template(
           - `past_simple` and `past_participle` — only if Q is in English and L is an irregular word
     """).strip()
 )
+
+EXAMPLE_INSTRUCTIONS = textwrap.dedent("""
+    You are a translator and dictionary.
+    Swear words are allowed when necessary.
+    Informal language is allowed as well.
+    Do not explain your actions. Output ONLY JSON matching the schema.
+    Between UK and US variants, choose UK.
+
+    Generate an example sentence using the provided lexeme and return it in the `example` field.
+    Before doing so, correct grammar and spelling in the lexeme if needed.
+    Ensure proper sentence capitalization and punctuation.
+    Do not expand or correct contractions.
+    Keep the lexeme unchanged where possible.
+    If unable to produce a meaningful example, set `example` to null.
+""").strip()
 
 
 def _format_cli_card(card: Card, idx: int) -> Text:
@@ -215,22 +235,25 @@ def print_response(cfg: argparse.Namespace, r: TranslatorResponse) -> None:
 class ConfirmResult(Enum):
     YES = auto()
     NO = auto()
+    EXAMPLE = auto()
     QUIT = auto()
 
 
 def confirm(prompt: str) -> ConfirmResult:
     while True:
         try:
-            ans = input(f'{prompt} [y/N/q] ').strip().lower()
+            ans = input(f'{prompt} [y/N/e/q] ').strip().lower()
         except (EOFError, KeyboardInterrupt):
             return ConfirmResult.NO
         if ans == 'y':
             return ConfirmResult.YES
         if ans in ('n', ''):
             return ConfirmResult.NO
+        if ans == 'e':
+            return ConfirmResult.EXAMPLE
         if ans == 'q':
             return ConfirmResult.QUIT
-        CON.print('Please enter y, n, or q')
+        CON.print('Please enter y, n, e, or q')
 
 
 def to_db_card(card) -> db_types.Card:
@@ -245,65 +268,90 @@ def to_db_card(card) -> db_types.Card:
     )
 
 
-def save_cards(cfg, cards: list[db_types.Card]) -> None:
-    for idx, card in enumerate(cards, 1):
-        CON.print()
-        CON.print(db_types.format_card(card, idx), markup=False)
-        CON.print()
-        res = confirm('Save?')
-        if res == ConfirmResult.QUIT:
-            CON.print('Skipping remaining cards')
-            break
-        if res == ConfirmResult.NO:
-            continue
-        try:
-            with psycopg.connect(cfg.db_conn_string) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                            insert into cards (
-                                lexeme,
-                                rp,
-                                base_form,
-                                past_simple,
-                                past_participle,
-                                translations,
-                                example
+def make_example(cfg: argparse.Namespace, card: db_types.Card) -> None:
+    client = OpenAI(api_key=cfg.openai_api_key)
+    resp = client.responses.parse(
+        model='gpt-5',
+        reasoning={'effort': cfg.reason},
+        instructions=EXAMPLE_INSTRUCTIONS,
+        input=card.lexeme,
+        text_format=ExampleResponse,
+    )
+    if resp.output_parsed is None:
+        raise SystemExit('OpenAI response could not be parsed')
+    data: ExampleResponse = resp.output_parsed
+    card.example = [data.example] if data.example is not None else []
+
+
+def save_card(cfg: argparse.Namespace, card: db_types.Card) -> None:
+    try:
+        with psycopg.connect(cfg.db_conn_string) as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                        insert into cards (
+                            lexeme,
+                            rp,
+                            base_form,
+                            past_simple,
+                            past_participle,
+                            translations,
+                            example
+                        )
+                        values (%s, %s, %s, %s, %s, %s, %s)
+                        on conflict (lower(lexeme)) do update set
+                            translations = (
+                                select coalesce(array_agg(distinct x), '{}')
+                                from unnest(cards.translations || excluded.translations) as x
+                            ),
+                            rp = (
+                                select coalesce(array_agg(distinct x), '{}')
+                                from unnest(cards.rp || excluded.rp) as x
+                            ),
+                            example = (
+                                select coalesce(array_agg(distinct x), '{}')
+                                from unnest(cards.example || excluded.example) as x
                             )
-                            values (%s, %s, %s, %s, %s, %s, %s)
-                            on conflict (lower(lexeme)) do update set
-                                translations = (
-                                    select coalesce(array_agg(distinct x), '{}')
-                                    from unnest(cards.translations || excluded.translations) as x
-                                ),
-                                rp = (
-                                    select coalesce(array_agg(distinct x), '{}')
-                                    from unnest(cards.rp || excluded.rp) as x
-                                ),
-                                example = (
-                                    select coalesce(array_agg(distinct x), '{}')
-                                    from unnest(cards.example || excluded.example) as x
-                                )
-                            returning (xmax = 0) as inserted;
-                        """,
-                        (
-                            card.lexeme,
-                            card.rp,
-                            card.base_form,
-                            card.past_simple,
-                            card.past_participle,
-                            card.translations,
-                            card.example,
-                        ),
-                    )
-                    row = cur.fetchone()
-                    assert row is not None
-                    inserted = row[0]
-                    CON.print('Saved' if inserted else 'Merged')
-                conn.commit()
-        except psycopg.Error as e:
-            print(f'Failed to save cards to postgres: {e}', file=sys.stderr)
-            sys.exit(2)
+                        returning (xmax = 0) as inserted;
+                    """,
+                    (
+                        card.lexeme,
+                        card.rp,
+                        card.base_form,
+                        card.past_simple,
+                        card.past_participle,
+                        card.translations,
+                        card.example,
+                    ),
+                )
+                row = cur.fetchone()
+                assert row is not None
+                inserted = row[0]
+                CON.print('Saved' if inserted else 'Merged')
+            conn.commit()
+    except psycopg.Error as e:
+        print(f'Failed to save cards to postgres: {e}', file=sys.stderr)
+        sys.exit(2)
+
+
+def save_cards(cfg: argparse.Namespace, cards: list[db_types.Card]) -> None:
+    for idx, card in enumerate(cards, 1):
+        proceed = True
+        while proceed:
+            proceed = False
+            CON.print()
+            CON.print(db_types.format_card(card, idx), markup=False)
+            CON.print()
+            res = confirm('Save?')
+            if res == ConfirmResult.QUIT:
+                CON.print('Skipping remaining cards')
+                return
+            if res == ConfirmResult.YES:
+                save_card(cfg, card)
+            if res == ConfirmResult.EXAMPLE:
+                proceed = True
+                make_example(cfg, card)
+                save_card(cfg, card)
 
 
 def read_interactively() -> str:
@@ -346,7 +394,7 @@ def main() -> None:
         raise no_query_error
 
     client = OpenAI(api_key=cfg.openai_api_key)
-    instructions = INSTRUCTIONS.substitute(
+    instructions = TRANSLATION_INSTRUCTIONS.substitute(
         {
             'WORD_COUNT': len(query.split()),
             'LEVEL': cfg.level,
