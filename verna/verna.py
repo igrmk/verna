@@ -130,9 +130,11 @@ EXAMPLE_INSTRUCTIONS = textwrap.dedent("""
 
     Generate an example sentence using the provided lexeme and return it in the `example` field.
     Before doing so, correct grammar and spelling in the lexeme if needed.
-    Ensure proper sentence capitalization and punctuation.
     Do not expand or correct contractions.
     Keep the lexeme unchanged where possible.
+    Keep the sentence concise—ideally around 5 words.
+    Cite a film or book if appropriate.
+    Ensure proper sentence capitalization and punctuation.
     If unable to produce a meaningful example, set `example` to null.
 """).strip()
 
