@@ -353,7 +353,6 @@ def save_cards(cfg: argparse.Namespace, cards: list[db_types.Card]) -> None:
             if res == ConfirmResult.EXAMPLE:
                 proceed = True
                 make_example(cfg, card)
-                save_card(cfg, card)
 
 
 def read_interactively() -> str:
