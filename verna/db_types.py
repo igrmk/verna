@@ -38,11 +38,10 @@ def format_card(card: Card, idx: int) -> Text:
         t.append('\n  - ')
         t.append(x)
 
-    if card.example:
-        t.append('\n\n  > ')
-        for s in card.example:
-            t.append(s, style='italic')
-            if s is not card.example[-1]:
-                t.append('\n  > ')
+    if len(card.example) > 0:
+        t.append('\n')
+    for s in card.example:
+        t.append('\n  > ')
+        t.append(s, style='italic')
 
     return t
