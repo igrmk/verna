@@ -10,7 +10,7 @@ class Card:
     past_simple: str | None
     past_participle: str | None
     translations: list[str]
-    context_sentence: list[str]
+    example: list[str]
 
 
 def format_card(card: Card, idx: int) -> Text:
@@ -38,11 +38,11 @@ def format_card(card: Card, idx: int) -> Text:
         t.append('\n  - ')
         t.append(x)
 
-    if card.context_sentence:
+    if card.example:
         t.append('\n\n  > ')
-        for s in card.context_sentence:
+        for s in card.example:
             t.append(s, style='italic')
-            if s is not card.context_sentence[-1]:
+            if s is not card.example[-1]:
                 t.append('\n  > ')
 
     return t

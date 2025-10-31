@@ -44,7 +44,7 @@ class Lexeme(BaseModel):
 class Card(BaseModel):
     lexeme: Lexeme
     translations: list[Lexeme]
-    context_sentence: str | None
+    example: str | None
 
 
 class TranslatorResponse(BaseModel):
@@ -100,7 +100,7 @@ INSTRUCTIONS = Template(
           - Fill `C.lexeme` according to the `Lexeme` filling rules
           - Fill `C.translations` with an exhaustive list of translations,
             including those outside Q's context, following the `Lexeme` filling rules
-          - Fill `C.context_sentence` with the full sentence where the lexeme occurs in Q,
+          - Fill `C.example` with the full sentence where the lexeme occurs in Q,
             correcting grammar and spelling beforehand;
             ensure proper sentence capitalization and punctuation;
             don't correct contractions;
@@ -145,9 +145,9 @@ def _format_cli_card(card: Card, idx: int) -> Text:
             t.append(' ')
             t.append(f'/{rp}/', style='italic')
 
-    if card.context_sentence:
+    if card.example:
         t.append('\n\n  > ')
-        t.append(card.context_sentence, style='italic')
+        t.append(card.example, style='italic')
 
     return t
 
@@ -241,7 +241,7 @@ def to_db_card(card) -> db_types.Card:
         past_simple=card.lexeme.past_simple,
         past_participle=card.lexeme.past_participle,
         translations=[t.text.strip() for t in card.translations],
-        context_sentence=[card.context_sentence] if card.context_sentence is not None else [],
+        example=[card.example] if card.example is not None else [],
     )
 
 
@@ -268,7 +268,7 @@ def save_cards(cfg, cards: list[db_types.Card]) -> None:
                                 past_simple,
                                 past_participle,
                                 translations,
-                                context_sentence
+                                example
                             )
                             values (%s, %s, %s, %s, %s, %s, %s)
                             on conflict (lower(lexeme)) do update set
@@ -280,9 +280,9 @@ def save_cards(cfg, cards: list[db_types.Card]) -> None:
                                     select coalesce(array_agg(distinct x), '{}')
                                     from unnest(cards.rp || excluded.rp) as x
                                 ),
-                                context_sentence = (
+                                example = (
                                     select coalesce(array_agg(distinct x), '{}')
-                                    from unnest(cards.context_sentence || excluded.context_sentence) as x
+                                    from unnest(cards.example || excluded.example) as x
                                 )
                             returning (xmax = 0) as inserted;
                         """,
@@ -293,7 +293,7 @@ def save_cards(cfg, cards: list[db_types.Card]) -> None:
                             card.past_simple,
                             card.past_participle,
                             card.translations,
-                            card.context_sentence,
+                            card.example,
                         ),
                     )
                     row = cur.fetchone()

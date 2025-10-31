@@ -51,7 +51,7 @@ def fetch_random_cards(conn, limit: int) -> list[db_types.Card]:
     with conn.cursor() as cur:
         cur.execute(
             """
-                select lexeme, rp, past_simple, past_participle, translations, context_sentence
+                select lexeme, rp, past_simple, past_participle, translations, example
                 from cards
                 order by random()
                 limit %s;
@@ -67,7 +67,7 @@ def fetch_random_cards(conn, limit: int) -> list[db_types.Card]:
                 past_simple=row[2],
                 past_participle=row[3],
                 translations=row[4],
-                context_sentence=row[5],
+                example=row[5],
             )
             for row in rows
         ]
