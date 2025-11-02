@@ -3,3 +3,4 @@ __pycache__/
 /build/
 /verna.egg-info/
 /.do/app.yaml
+/.idea/

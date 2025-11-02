@@ -4,8 +4,6 @@ import textwrap
 import argparse
 from verna import db_types
 from enum import Enum, auto
-from string import Template
-
 import psycopg
 from openai import OpenAI
 from pydantic import BaseModel, Field
@@ -18,7 +16,16 @@ from verna.config import get_parser, Sections, print_config
 from rich.console import Console
 from rich.text import Text
 
+from jinja2 import Environment, StrictUndefined
+
 CON = Console()
+
+JINJA_ENV = Environment(
+    undefined=StrictUndefined,
+    trim_blocks=True,
+    lstrip_blocks=True,
+    autoescape=False,
+)
 
 
 class Mode(UpperStrEnum):
@@ -60,7 +67,7 @@ class ExampleResponse(BaseModel):
     example: str | None
 
 
-TRANSLATION_INSTRUCTIONS = Template(
+TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
     textwrap.dedent("""
         You are a translator and dictionary.
         Swear words are allowed when necessary.
@@ -71,7 +78,7 @@ TRANSLATION_INSTRUCTIONS = Template(
         Let Q be the user input.
 
         Input variables:
-          - WORD_COUNT(Q) = ${WORD_COUNT}
+          - WORD_COUNT(Q) = {{ word_count }}
 
         Set `language` to Q's language.
         If `language` is `OTHER`, output ONLY {"language": "OTHER"}.
@@ -95,7 +102,7 @@ TRANSLATION_INSTRUCTIONS = Template(
         Otherwise, if `mode` = `TEXT`, fill the root fields:
           - `translation` — to Russian if Q is in English, or to English if Q is in Russian
           - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 10
-          - `cards` — list all English lexemes at the level ${LEVEL} or higher that appear in Q if Q is in English.
+          - `cards` — list all English lexemes at the level {{ level }} or higher that appear in Q if Q is in English.
             Extract longer lexemes such as phrasal verbs or phrasemes instead of single words when available.
             Exclude proper names.
             Fill each card according to the `Card` filling rules.
@@ -107,7 +114,7 @@ TRANSLATION_INSTRUCTIONS = Template(
             including those outside Q's context, following the `Lexeme` filling rules
           - Fill `C.example` with the full sentence where the lexeme occurs in Q,
             correcting grammar and spelling beforehand;
-            ensure proper sentence capitalization and punctuation;
+            ensure proper sentence capitalisation and punctuation;
             don't correct contractions;
             leave the lexeme as is where possible;
             set to null if unavailable
@@ -121,22 +128,33 @@ TRANSLATION_INSTRUCTIONS = Template(
     """).strip()
 )
 
-EXAMPLE_INSTRUCTIONS = textwrap.dedent("""
-    You are a translator and dictionary.
-    Swear words are allowed when necessary.
-    Informal language is allowed as well.
-    Do not explain your actions. Output ONLY JSON matching the schema.
-    Between UK and US variants, choose UK.
+EXAMPLE_INSTRUCTIONS = JINJA_ENV.from_string(
+    textwrap.dedent(r"""
+        You are a translator and dictionary.
+        Swear words are allowed when necessary.
+        Informal language is allowed as well.
+        Do not explain your actions. Output ONLY JSON matching the schema.
+        Between UK and US variants, choose UK.
 
-    Generate an example sentence using the provided lexeme and return it in the `example` field.
-    Before doing so, correct grammar and spelling in the lexeme if needed.
-    Do not expand or correct contractions.
-    Keep the lexeme unchanged where possible.
-    Keep the sentence concise—ideally around 5 words.
-    Cite a film or book if appropriate.
-    Ensure proper sentence capitalization and punctuation.
-    If unable to produce a meaningful example, set `example` to null.
-""").strip()
+        Generate an example sentence using the provided lexeme and return it in the `example` field.
+        Before doing so, correct grammar and spelling in the lexeme if needed.
+        Do not expand or correct contractions.
+        Keep the lexeme unchanged where possible.
+        Keep the sentence concise—ideally around 5 words.
+        Cite a film or book if appropriate.
+        Ensure proper sentence capitalisation and punctuation.
+        If unable to produce a meaningful example, set `example` to null.
+
+        {%- if previous_examples -%}
+            {{- '\n\n' -}}
+            Don't use any of these examples:
+            {%- for x in previous_examples -%}
+                {{- '\n  ' -}}
+                - {{ x }}
+            {%- endfor -%}
+        {%- endif -%}
+    """).strip()
+)
 
 
 def _format_cli_card(card: Card, idx: int) -> Text:
@@ -270,12 +288,17 @@ def to_db_card(card) -> db_types.Card:
     )
 
 
-def make_example(cfg: argparse.Namespace, card: db_types.Card) -> None:
+def make_example(cfg: argparse.Namespace, card: db_types.Card, previous_examples: list[str]) -> None:
     client = OpenAI(api_key=cfg.openai_api_key)
+    instructions = EXAMPLE_INSTRUCTIONS.render(previous_examples=previous_examples)
+
+    if cfg.debug:
+        CON.print(f'INSTRUCTIONS:\n{instructions}')
+
     resp = client.responses.parse(
         model='gpt-5',
         reasoning={'effort': cfg.reason},
-        instructions=EXAMPLE_INSTRUCTIONS,
+        instructions=instructions,
         input=card.lexeme,
         text_format=ExampleResponse,
     )
@@ -338,6 +361,7 @@ def save_card(cfg: argparse.Namespace, card: db_types.Card) -> None:
 
 def save_cards(cfg: argparse.Namespace, cards: list[db_types.Card]) -> None:
     for idx, card in enumerate(cards, 1):
+        previous_examples = []
         proceed = True
         while proceed:
             proceed = False
@@ -352,7 +376,9 @@ def save_cards(cfg: argparse.Namespace, cards: list[db_types.Card]) -> None:
                 save_card(cfg, card)
             if res == ConfirmResult.EXAMPLE:
                 proceed = True
-                make_example(cfg, card)
+                if len(card.example) > 0:
+                    previous_examples += card.example
+                make_example(cfg, card, previous_examples)
 
 
 def read_interactively() -> str:
@@ -395,11 +421,9 @@ def main() -> None:
         raise no_query_error
 
     client = OpenAI(api_key=cfg.openai_api_key)
-    instructions = TRANSLATION_INSTRUCTIONS.substitute(
-        {
-            'WORD_COUNT': len(query.split()),
-            'LEVEL': cfg.level,
-        }
+    instructions = TRANSLATION_INSTRUCTIONS.render(
+        word_count=len(query.split()),
+        level=cfg.level,
     )
     if cfg.debug:
         CON.print(f'INSTRUCTIONS:\n{instructions}\n')
