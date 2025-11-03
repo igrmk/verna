@@ -141,13 +141,14 @@ EXAMPLE_INSTRUCTIONS = JINJA_ENV.from_string(
         Do not expand or correct contractions.
         Keep the lexeme unchanged where possible.
         Keep the sentence concise—ideally around 5 words.
-        Cite a film or book if appropriate.
+        Cite a film or book if appropriate, but avoid proper names.
         Ensure proper sentence capitalisation and punctuation.
         If unable to produce a meaningful example, set `example` to null.
 
         {%- if previous_examples -%}
             {{- '\n\n' -}}
-            Don't use any of these examples:
+            Don't use any of the following examples
+            and try to produce one that doesn't resemble any of them:
             {%- for x in previous_examples -%}
                 {{- '\n  ' -}}
                 - {{ x }}
