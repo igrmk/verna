@@ -111,6 +111,7 @@ TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
         `Card` filling rules (for the current card C):
           - Fill `C.lexeme` according to the `Lexeme` filling rules
           - Fill `C.translations` with an exhaustive list of translations,
+            one translation per list item,
             including those outside Q's context, following the `Lexeme` filling rules
           - Fill `C.example` with the full sentence where the lexeme occurs in Q,
             correcting grammar and spelling beforehand;
