@@ -116,6 +116,7 @@ TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
             correcting grammar and spelling beforehand;
             ensure proper sentence capitalisation and punctuation;
             don't correct contractions;
+            don't correct local variants;
             leave the lexeme as is where possible;
             set to null if unavailable
 
