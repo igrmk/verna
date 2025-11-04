@@ -18,10 +18,10 @@ def format_card(card: Card, idx: int) -> Text:
     t.append(f'[{idx}]', style='bold')
     t.append(' ')
 
-    t.append(card.lexeme)
+    t.append(card.lexeme, style='bold')
     for rp in card.rp:
         t.append(' ')
-        t.append(f'/{rp}/', style='italic')
+        t.append(f'/{rp}/', style='bold italic')
 
     def add_kv(k: str, v: str | None) -> None:
         if v:

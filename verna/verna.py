@@ -165,10 +165,10 @@ def _format_cli_card(card: Card, idx: int) -> Text:
     t.append(f'[{idx}]', style='bold')
     t.append(' ')
 
-    t.append(card.lexeme.text)
+    t.append(card.lexeme.text, style='bold')
     for rp in card.lexeme.rp:
         t.append(' ')
-        t.append(f'/{rp}/', style='italic')
+        t.append(f'/{rp}/', style='bold italic')
 
     def add_kv(k: str, v: str | None) -> None:
         if v:
