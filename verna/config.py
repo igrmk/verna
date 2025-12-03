@@ -17,6 +17,8 @@ class Sections(StrEnum):
 
 
 class ReasoningLevel(StrEnum):
+    UNSUPPORTED = 'unsupported'
+    NONE = 'none'
     MINIMAL = 'minimal'
     LOW = 'low'
     MEDIUM = 'medium'
@@ -78,6 +80,13 @@ def _add_openai(p: configargparse.ArgParser) -> None:
         type=str,
         required=True,
         help='OpenAI API key',
+    )
+    p.add_argument(
+        '--model',
+        env_var='VERNA_MODEL',
+        type=str,
+        required=True,
+        help='OpenAI model ID',
     )
     reason_group = p.add_mutually_exclusive_group(required=False)
     reason_group.add_argument(

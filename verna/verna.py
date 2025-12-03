@@ -1,3 +1,4 @@
+import time
 import json
 import sys
 import textwrap
@@ -11,7 +12,7 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.key_binding import KeyBindings
 
 from verna.upper_str_enum import UpperStrEnum
-from verna.config import get_parser, Sections, print_config
+from verna.config import get_parser, Sections, print_config, ReasoningLevel
 
 from rich.console import Console
 from rich.text import Text
@@ -91,8 +92,9 @@ TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
           - UK-only spelling variants
 
         Fill `mode` to:
-          - `LEXEME`, only if both of the following are true:
+          - `LEXEME`, only if all of the following are true:
             - Q is a single word, a fixed phraseme, or a short, idiomatic, highly common sentence
+            - Q contains no proper names of people
             - WORD_COUNT(Q) ≤ 5
           - `TEXT`, otherwise
 
@@ -103,7 +105,7 @@ TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
           - `translation` — to Russian if Q is in English, or to English if Q is in Russian
           - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 10
           - `cards` — list all English lexemes at the level {{ level }} or higher that appear in Q if Q is in English.
-            Extract longer lexemes such as phrasal verbs or phrasemes instead of single words when available.
+            Extract multi-word lexemes (e.g. phrasal verbs and phrasemes) in addition to single words.
             Exclude proper names.
             Fill each card according to the `Card` filling rules.
             Treat different forms (e.g., verb and noun) as one lexeme
@@ -298,13 +300,21 @@ def make_example(cfg: argparse.Namespace, card: db_types.Card, previous_examples
     if cfg.debug:
         CON.print(f'INSTRUCTIONS:\n{instructions}')
 
-    resp = client.responses.parse(
-        model='gpt-5',
-        reasoning={'effort': cfg.reason},
-        instructions=instructions,
-        input=card.lexeme,
-        text_format=ExampleResponse,
-    )
+    if cfg.reason == ReasoningLevel.UNSUPPORTED:
+        resp = client.responses.parse(
+            model=cfg.model,
+            instructions=instructions,
+            input=card.lexeme,
+            text_format=ExampleResponse,
+        )
+    else:
+        resp = client.responses.parse(
+            model=cfg.model,
+            reasoning={'effort': cfg.reason},
+            instructions=instructions,
+            input=card.lexeme,
+            text_format=ExampleResponse,
+        )
     if resp.output_parsed is None:
         raise SystemExit('OpenAI response could not be parsed')
     data: ExampleResponse = resp.output_parsed
@@ -430,13 +440,25 @@ def main() -> None:
     )
     if cfg.debug:
         CON.print(f'INSTRUCTIONS:\n{instructions}\n')
-    resp = client.responses.parse(
-        model='gpt-5',
-        reasoning={'effort': cfg.reason},
-        instructions=instructions,
-        input=query,
-        text_format=TranslatorResponse,
-    )
+
+    start_time = time.perf_counter()
+    if cfg.reason == ReasoningLevel.UNSUPPORTED:
+        resp = client.responses.parse(
+            model=cfg.model,
+            instructions=instructions,
+            input=query,
+            text_format=TranslatorResponse,
+        )
+    else:
+        resp = client.responses.parse(
+            model=cfg.model,
+            reasoning={'effort': cfg.reason},
+            instructions=instructions,
+            input=query,
+            text_format=TranslatorResponse,
+        )
+    elapsed = time.perf_counter() - start_time
+    CON.print(f'{cfg.model} responded in {elapsed:.1f}s\n')
 
     if resp.output_parsed is None:
         raise SystemExit('OpenAI response could not be parsed')
