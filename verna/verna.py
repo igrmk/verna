@@ -44,7 +44,6 @@ class Lexeme(BaseModel):
     text: str
     language: Language
     rp: list[str] = Field(default_factory=list)
-    base_form: str | None = None
     past_simple: str | None = None
     past_participle: str | None = None
 
@@ -124,10 +123,9 @@ TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
             set to null if unavailable
 
         `Lexeme` filling rules (for the current lexeme L):
-          - `text` — required
+          - `text` — required; the lexeme in its base form
           - `language` — required
-          - `rp` — list of possible British RP transcription of L, without slashes, only if L is English
-          - `base_form` — only if Q is in English and L is a word not in its base form
+          - `rp` — list of possible British RP transcription of L, without slashes; only if L is English
           - `past_simple` and `past_participle` — only if Q is in English and L is an irregular word
     """).strip()
 )
@@ -179,7 +177,6 @@ def _format_cli_card(card: Card, idx: int) -> Text:
             t.append(' ')
             t.append(v)
 
-    add_kv('BASE FORM', card.lexeme.base_form)
     add_kv('PAST SIMPLE', card.lexeme.past_simple)
     add_kv('PAST PARTICIPLE', card.lexeme.past_participle)
 
@@ -285,7 +282,7 @@ def to_db_card(card) -> db_types.Card:
     return db_types.Card(
         lexeme=card.lexeme.text.strip(),
         rp=card.lexeme.rp,
-        base_form=card.lexeme.base_form,
+        base_form=None,
         past_simple=card.lexeme.past_simple,
         past_participle=card.lexeme.past_participle,
         translations=[t.text.strip() for t in card.translations],
@@ -330,13 +327,12 @@ def save_card(cfg: argparse.Namespace, card: db_types.Card) -> None:
                         insert into cards (
                             lexeme,
                             rp,
-                            base_form,
                             past_simple,
                             past_participle,
                             translations,
                             example
                         )
-                        values (%s, %s, %s, %s, %s, %s, %s)
+                        values (%s, %s, %s, %s, %s, %s)
                         on conflict (lower(lexeme)) do update set
                             translations = (
                                 select coalesce(array_agg(distinct x), '{}')
@@ -355,7 +351,6 @@ def save_card(cfg: argparse.Namespace, card: db_types.Card) -> None:
                     (
                         card.lexeme,
                         card.rp,
-                        card.base_form,
                         card.past_simple,
                         card.past_participle,
                         card.translations,
