@@ -61,7 +61,7 @@ def apply_migrations(conn: psycopg.Connection, db_owner: str | None) -> None:
     print('All pending migrations applied')
 
 
-def main() -> None:
+def main() -> int:
     cfg = parse_config(sections=[Sections.DB], require_db=True)
     try:
         with psycopg.connect(cfg.db_conn_string) as conn:
@@ -69,8 +69,9 @@ def main() -> None:
             print('Migration completed successfully')
     except Exception as e:
         print(f'Migration failed: {e}')
-        sys.exit(1)
+        return 1
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

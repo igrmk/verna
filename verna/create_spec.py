@@ -17,7 +17,7 @@ def upsert_env(envs: list[dict], key: str, value: str) -> None:
     envs.append({'key': key, 'value': value, 'scope': 'RUN_TIME', 'type': 'SECRET'})
 
 
-def main() -> None:
+def main() -> int:
     cfg = parse_config(
         sections=[Sections.DB, Sections.TELEGRAM, Sections.OPENAI],
         require_db=True,
@@ -53,7 +53,8 @@ def main() -> None:
         yaml.safe_dump(data, f, sort_keys=False, explicit_start=True)
 
     print(f'Wrote {OUTPUT_PATH} (updated {len(jobs)} job(s)) with mode 600')
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

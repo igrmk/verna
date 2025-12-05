@@ -408,18 +408,18 @@ def read_interactively() -> str:
     return session.prompt('Ctrl-D> ', multiline=True, prompt_continuation=cont, key_bindings=kb)
 
 
-def main() -> None:
+def work() -> int:
     parser = get_parser(sections=[Sections.DB, Sections.VERNA, Sections.OPENAI], require_db=False)
     parser.add_argument('query', nargs='*')
     cfg = parser.parse_args()
 
     if cfg.print_config:
         print_config(cfg)
-        sys.exit(0)
+        return 0
 
     if cfg.show_schema:
         CON.print(json.dumps(TranslatorResponse.model_json_schema(), indent=2))
-        sys.exit(0)
+        return 0
 
     query = ' '.join(cfg.query).strip()
     no_query_error = SystemExit('You must provide a query or use --show-schema')
@@ -471,7 +471,15 @@ def main() -> None:
         CON.print()
         CON.print('SAVING CARDS', style='bold underline')
         save_cards(cfg, english_cards)
+    return 0
+
+
+def main() -> int:
+    try:
+        return work()
+    except KeyboardInterrupt:
+        return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

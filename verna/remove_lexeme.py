@@ -18,14 +18,14 @@ def remove_lexeme(conn, lexeme: str) -> bool:
     return row is not None
 
 
-def main() -> None:
+def main() -> int:
     parser = get_parser(sections=[Sections.DB, Sections.REMOVE], require_db=True)
     parser.add_argument('lexeme', nargs='+')
     cfg = parser.parse_args()
 
     if cfg.print_config:
         print_config(cfg)
-        sys.exit(0)
+        return 0
 
     q = ' '.join(cfg.lexeme).strip()
     if not q:
@@ -40,8 +40,10 @@ def main() -> None:
                 print(f'No lexeme found matching: {q}')
     except Exception as e:
         print(f'Failed to remove lexeme: {e}')
-        sys.exit(1)
+        return 1
+
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
