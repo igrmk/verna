@@ -13,7 +13,7 @@ class Sections(StrEnum):
     RANDOM = 'random'
     VERNA = 'verna'
     REMOVE = 'remove'
-    OPENAI = 'openai'
+    AI = 'ai'
 
 
 class ReasoningLevel(StrEnum):
@@ -73,20 +73,27 @@ def _add_db(p: configargparse.ArgParser, *, require_db: bool) -> None:
     )
 
 
-def _add_openai(p: configargparse.ArgParser) -> None:
+def _add_ai(p: configargparse.ArgParser) -> None:
     p.add_argument(
-        '--openai-api-key',
-        env_var='OPENAI_API_KEY',
+        '--api-key',
+        env_var='VERNA_API_KEY',
         type=str,
         required=True,
-        help='OpenAI API key',
+        help='AI API key',
+    )
+    p.add_argument(
+        '--api-base-url',
+        env_var='VERNA_API_BASE_URL',
+        type=str,
+        required=False,
+        help='AI API base URL',
     )
     p.add_argument(
         '--model',
         env_var='VERNA_MODEL',
         type=str,
         required=True,
-        help='OpenAI model ID',
+        help='AI model ID',
     )
     reason_group = p.add_mutually_exclusive_group(required=False)
     reason_group.add_argument(
@@ -94,7 +101,7 @@ def _add_openai(p: configargparse.ArgParser) -> None:
         env_var='VERNA_REASON',
         type=ReasoningLevel,
         choices=ReasoningLevel,
-        help='OpenAI reasoning effort',
+        help='AI reasoning effort',
     )
     default_think_reasoning_level = ReasoningLevel.MEDIUM
     reason_group.add_argument(
@@ -103,7 +110,7 @@ def _add_openai(p: configargparse.ArgParser) -> None:
         dest='reason',
         action='store_const',
         const=default_think_reasoning_level,
-        help=f'Make OpenAI think (alias for --reason {default_think_reasoning_level})',
+        help=f'Make AI think (alias for --reason {default_think_reasoning_level})',
     )
     p.set_defaults(reason=ReasoningLevel.MINIMAL)
 
@@ -182,8 +189,8 @@ def get_parser(
         _add_random(p)
     if Sections.VERNA in sections:
         _add_verna(p)
-    if Sections.OPENAI in sections:
-        _add_openai(p)
+    if Sections.AI in sections:
+        _add_ai(p)
     return p
 
 

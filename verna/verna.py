@@ -291,29 +291,26 @@ def to_db_card(card) -> db_types.Card:
 
 
 def make_example(cfg: argparse.Namespace, card: db_types.Card, previous_examples: list[str]) -> None:
-    client = OpenAI(api_key=cfg.openai_api_key)
+    client = OpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
     instructions = EXAMPLE_INSTRUCTIONS.render(previous_examples=previous_examples)
 
     if cfg.debug:
         CON.print(f'INSTRUCTIONS:\n{instructions}')
 
-    if cfg.reason == ReasoningLevel.UNSUPPORTED:
-        resp = client.responses.parse(
-            model=cfg.model,
-            instructions=instructions,
-            input=card.lexeme,
-            text_format=ExampleResponse,
-        )
-    else:
-        resp = client.responses.parse(
-            model=cfg.model,
-            reasoning={'effort': cfg.reason},
-            instructions=instructions,
-            input=card.lexeme,
-            text_format=ExampleResponse,
-        )
+    kwargs = {
+        'model': cfg.model,
+        'instructions': instructions,
+        'input': card.lexeme,
+        'text_format': ExampleResponse,
+    }
+
+    if cfg.reason != ReasoningLevel.UNSUPPORTED:
+        kwargs['reasoning'] = {'effort': cfg.reason}
+
+    resp = client.responses.parse(**kwargs)
+
     if resp.output_parsed is None:
-        raise SystemExit('OpenAI response could not be parsed')
+        raise SystemExit('AI response could not be parsed')
     data: ExampleResponse = resp.output_parsed
     card.example = [data.example] if data.example is not None else []
 
@@ -404,7 +401,7 @@ def read_interactively() -> str:
 
 
 def work() -> int:
-    parser = get_parser(sections=[Sections.DB, Sections.VERNA, Sections.OPENAI], require_db=False)
+    parser = get_parser(sections=[Sections.DB, Sections.VERNA, Sections.AI], require_db=False)
     parser.add_argument('query', nargs='*')
     cfg = parser.parse_args()
 
@@ -428,7 +425,7 @@ def work() -> int:
     if not query:
         raise no_query_error
 
-    client = OpenAI(api_key=cfg.openai_api_key)
+    client = OpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
     instructions = TRANSLATION_INSTRUCTIONS.render(
         word_count=len(query.split()),
         level=cfg.level,
@@ -437,26 +434,24 @@ def work() -> int:
         CON.print(f'INSTRUCTIONS:\n{instructions}\n')
 
     start_time = time.perf_counter()
-    if cfg.reason == ReasoningLevel.UNSUPPORTED:
-        resp = client.responses.parse(
-            model=cfg.model,
-            instructions=instructions,
-            input=query,
-            text_format=TranslatorResponse,
-        )
-    else:
-        resp = client.responses.parse(
-            model=cfg.model,
-            reasoning={'effort': cfg.reason},
-            instructions=instructions,
-            input=query,
-            text_format=TranslatorResponse,
-        )
+
+    kwargs = {
+        'model': cfg.model,
+        'instructions': instructions,
+        'input': query,
+        'text_format': TranslatorResponse,
+    }
+
+    if cfg.reason != ReasoningLevel.UNSUPPORTED:
+        kwargs['reasoning'] = {'effort': cfg.reason}
+
+    resp = client.responses.parse(**kwargs)
+
     elapsed = time.perf_counter() - start_time
     CON.print(f'{cfg.model} responded in {elapsed:.1f}s\n')
 
     if resp.output_parsed is None:
-        raise SystemExit('OpenAI response could not be parsed')
+        raise SystemExit('AI response could not be parsed')
 
     data: TranslatorResponse = resp.output_parsed
     print_response(cfg, data)

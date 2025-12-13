@@ -86,7 +86,7 @@ INSTRUCTIONS = textwrap.dedent("""
 
 def main() -> None:
     parser = get_parser(
-        sections=[Sections.DB, Sections.TELEGRAM, Sections.RANDOM, Sections.OPENAI],
+        sections=[Sections.DB, Sections.TELEGRAM, Sections.RANDOM, Sections.AI],
         require_db=True,
     )
     cfg = parser.parse_args()
@@ -112,7 +112,7 @@ def main() -> None:
         CON.print(card_text, markup=False)
         tg_card_messages.append(card_text.plain)
 
-    client = OpenAI(api_key=cfg.openai_api_key)
+    client = OpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
 
     lexeme_list = '\n'.join(f'[{idx}] {card.lexeme}' for idx, card in enumerate(cards, 1))
     request_text = textwrap.dedent(f"""
@@ -129,7 +129,7 @@ def main() -> None:
     )
 
     if resp.output_parsed is None:
-        raise SystemExit('OpenAI response could not be parsed')
+        raise SystemExit('AI response could not be parsed')
 
     data: Passage = resp.output_parsed
 

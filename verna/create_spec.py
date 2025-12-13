@@ -19,7 +19,7 @@ def upsert_env(envs: list[dict], key: str, value: str) -> None:
 
 def main() -> int:
     cfg = parse_config(
-        sections=[Sections.DB, Sections.TELEGRAM, Sections.OPENAI],
+        sections=[Sections.DB, Sections.TELEGRAM, Sections.AI],
         require_db=True,
         require_tg=True,
     )
@@ -31,7 +31,8 @@ def main() -> int:
         data = yaml.safe_load(f)
 
     secrets = {
-        'OPENAI_API_KEY': cfg.openai_api_key,
+        'VERNA_API_KEY': cfg.api_key,
+        'VERNA_API_BASE_URL': cfg.api_base_url,
         'VERNA_TG_BOT_TOKEN': cfg.tg_bot_token,
         'VERNA_TG_CHAT_ID': cfg.tg_chat_id,
         'VERNA_DB_CONN_STRING': cfg.db_conn_string,

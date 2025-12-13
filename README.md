@@ -12,7 +12,7 @@ Also I like the film Miller's Crossing.
 Prerequisites
 -------------
 
-1. OpenAI API key (`--openai-api-key`)
+1. OpenAI/OpenRouter/... API key (`--api-key`)
 2. PostgreSQL database (`--db-conn-string`)
 3. Your own Telegram bot (`--tg-bot-token`, `--tg-chat-id`)
 
