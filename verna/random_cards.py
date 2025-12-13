@@ -8,7 +8,7 @@ from verna import db_types
 from openai import OpenAI
 from pydantic import BaseModel
 
-from verna.config import get_parser, Sections, print_config
+from verna.config import get_parser, Sections, print_config, ReasoningLevel
 
 CON = Console()
 
@@ -120,13 +120,17 @@ def main() -> None:
         {lexeme_list}
     """).strip()
 
-    resp = client.responses.parse(
-        model='gpt-5',
-        reasoning={'effort': cfg.reason},
-        instructions=INSTRUCTIONS,
-        input=request_text,
-        text_format=Passage,
-    )
+    kwargs = {
+        'model': cfg.model,
+        'instructions': INSTRUCTIONS,
+        'input': request_text,
+        'text_format': Passage,
+    }
+
+    if cfg.reason != ReasoningLevel.UNSUPPORTED:
+        kwargs['reasoning'] = {'effort': cfg.reason}
+
+    resp = client.responses.parse(**kwargs)
 
     if resp.output_parsed is None:
         raise SystemExit('AI response could not be parsed')
