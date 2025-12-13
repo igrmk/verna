@@ -95,6 +95,27 @@ def _add_ai(p: configargparse.ArgParser) -> None:
         required=True,
         help='AI model ID',
     )
+    p.add_argument(
+        '--model-detect',
+        env_var='VERNA_MODEL_DETECT',
+        type=str,
+        required=False,
+        help='AI model ID for language detection (defaults to --model)',
+    )
+    p.add_argument(
+        '--model-translate',
+        env_var='VERNA_MODEL_TRANSLATE',
+        type=str,
+        required=False,
+        help='AI model ID for whole-text translation (defaults to --model)',
+    )
+    p.add_argument(
+        '--model-extract',
+        env_var='VERNA_MODEL_EXTRACT',
+        type=str,
+        required=False,
+        help='AI model ID for lexeme extraction (defaults to --model)',
+    )
     reason_group = p.add_mutually_exclusive_group(required=False)
     reason_group.add_argument(
         '--reason',
@@ -148,12 +169,6 @@ def _add_random(p: configargparse.ArgParser) -> None:
 
 
 def _add_verna(p: configargparse.ArgParser) -> None:
-    p.add_argument(
-        '--show-schema',
-        action=argparse.BooleanOptionalAction,
-        help='show JSON schema and exit',
-        default=False,
-    )
     p.add_argument(
         '-l',
         '--level',

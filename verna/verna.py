@@ -12,10 +12,9 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.key_binding import KeyBindings
 
 from verna.upper_str_enum import UpperStrEnum
-from verna.config import get_parser, Sections, print_config, ReasoningLevel
+from verna.config import get_parser, Sections, print_config, ReasoningLevel, CefrLevel
 
 from rich.console import Console
-from rich.text import Text
 
 from jinja2 import Environment, StrictUndefined
 
@@ -27,11 +26,6 @@ JINJA_ENV = Environment(
     lstrip_blocks=True,
     autoescape=False,
 )
-
-
-class Mode(UpperStrEnum):
-    LEXEME = auto()
-    TEXT = auto()
 
 
 class Language(UpperStrEnum):
@@ -54,79 +48,219 @@ class Card(BaseModel):
     example: str | None
 
 
-class TranslatorResponse(BaseModel):
-    mode: Mode | None = None
+class LanguageDetectionResponse(BaseModel):
     language: Language
-    typo_note: str | None = None
+
+
+class TranslationResponse(BaseModel):
+    translation: str
     rp: str | None = None
-    translation: str | None = None
-    cards: list[Card] = Field(default_factory=list)
+    typo_note: str | None = None
+
+
+class LexemeExtractionResponse(BaseModel):
+    class Item(BaseModel):
+        lexeme: str
+        example: str | None = None
+        cefr: CefrLevel
+
+    items: list[Item] = Field(default_factory=list)
+
+
+class LexemeTranslationResponse(BaseModel):
+    lexeme: Lexeme
+    translations: list[Lexeme] = Field(default_factory=list)
 
 
 class ExampleResponse(BaseModel):
     example: str | None
 
 
+def _responses_parse(
+    cfg: argparse.Namespace,
+    client: OpenAI,
+    *,
+    step: str,
+    instructions: str,
+    user_input: str,
+    text_format,
+    model: str | None = None,
+):
+    model_id = model or cfg.model
+    if cfg.debug:
+        CON.print(step, style='underline dim')
+        CON.print()
+        CON.print('USER INPUT:', style='dim')
+        CON.print(user_input, style='dim')
+        CON.print()
+        CON.print('SCHEMA:', style='dim')
+        schema = text_format.model_json_schema()
+        CON.print(json.dumps(schema, indent=2), style='dim')
+        CON.print()
+        CON.print(f'INSTRUCTIONS:\n{instructions}\n', style='dim')
+
+    start_time = time.perf_counter()
+
+    kwargs = {
+        'model': model_id,
+        'instructions': GENERAL_INSTRUCTIONS,
+        'input': [
+            {'role': 'system', 'content': instructions},
+            {'role': 'user', 'content': user_input},
+        ],
+        'text_format': text_format,
+    }
+    if cfg.reason != ReasoningLevel.UNSUPPORTED:
+        kwargs['reasoning'] = {'effort': cfg.reason}
+
+    resp = client.responses.parse(**kwargs)
+
+    elapsed = time.perf_counter() - start_time
+    CON.print(f'{model_id} responded in {elapsed:.1f}s', style='dim grey50')
+
+    if resp.output_parsed is None:
+        raise SystemExit(f'AI response could not be parsed ({step})')
+    return resp.output_parsed
+
+
+def detect_language(cfg: argparse.Namespace, client: OpenAI, query: str) -> LanguageDetectionResponse:
+    instructions = LANGUAGE_DETECTION_INSTRUCTIONS
+    return _responses_parse(
+        cfg,
+        client,
+        step='LANGUAGE DETECTION',
+        instructions=instructions,
+        user_input=query,
+        text_format=LanguageDetectionResponse,
+        model=cfg.model_detect or cfg.model,
+    )
+
+
+def translate_text(
+    cfg: argparse.Namespace,
+    client: OpenAI,
+    *,
+    query: str,
+    source_language: Language,
+) -> TranslationResponse:
+    word_count = len(query.split())
+    target_language = 'Russian' if source_language == Language.ENGLISH else 'English'
+    instructions = TRANSLATION_INSTRUCTIONS.render(
+        target_language=target_language,
+        word_count=word_count,
+    )
+    return _responses_parse(
+        cfg,
+        client,
+        step='TRANSLATION',
+        instructions=instructions,
+        user_input=query,
+        text_format=TranslationResponse,
+        model=cfg.model_translate or cfg.model,
+    )
+
+
+def extract_lexemes(cfg: argparse.Namespace, client: OpenAI, *, query: str) -> LexemeExtractionResponse:
+    instructions = LEXEME_EXTRACTION_INSTRUCTIONS.render()
+    return _responses_parse(
+        cfg,
+        client,
+        step='LEXEME EXTRACTION',
+        instructions=instructions,
+        user_input=query,
+        text_format=LexemeExtractionResponse,
+        model=cfg.model_extract or cfg.model,
+    )
+
+
+def translate_lexeme(cfg: argparse.Namespace, client: OpenAI, *, lexeme_text: str) -> LexemeTranslationResponse:
+    instructions = LEXEME_TRANSLATION_INSTRUCTIONS.render()
+    return _responses_parse(
+        cfg,
+        client,
+        step=f'LEXEME TRANSLATION: {lexeme_text}',
+        instructions=instructions,
+        user_input=lexeme_text,
+        text_format=LexemeTranslationResponse,
+        model=cfg.model_translate or cfg.model,
+    )
+
+
+GENERAL_INSTRUCTIONS = 'Do not explain your actions. Do not ask questions. Output ONLY JSON matching the schema'
+
+LANGUAGE_DETECTION_INSTRUCTIONS = 'You are a language detector. Set `language` to the language of the user input.'
+
 TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
     textwrap.dedent("""
-        You are a translator and dictionary.
-        Swear words are allowed when necessary.
-        Informal language is allowed as well.
+        You are a translator.
+        Informal language and swear words are allowed when necessary.
         Do not explain your actions. Output ONLY JSON matching the schema.
         Between UK and US variants, choose UK.
 
-        Let Q be the user input.
+        Translate the user input into {{ target_language }} and fill these fields:
+          - `translation` — translation of the user input into {{ target_language }}
+          - `typo_note` — if you suspect a genuine spelling typo in the user input, add a short note; otherwise set to null.
+            Not a typo:
+              - informal usage
+              - colloquial expressions
+              - contractions such as "wanna" or "gonna"
+              - UK-only spelling variants
+          {% if target_language == "Russian" and word_count <= 10 %}
+          - `rp` — British RP transcription of the user input without slashes
+          {% else %}
+          - `rp` — set to null
+          {% endif %}
+    """).strip()
+)
 
-        Input variables:
-          - WORD_COUNT(Q) = {{ word_count }}
+LEXEME_EXTRACTION_INSTRUCTIONS = JINJA_ENV.from_string(
+    textwrap.dedent("""
+        You are a dictionary and lexeme extractor.
+        Informal language and swear words are allowed when necessary.
+        Do not explain your actions. Output ONLY JSON matching the schema.
+        Between UK and US variants, choose UK.
 
-        Set `language` to Q's language.
-        If `language` is `OTHER`, output ONLY {"language": "OTHER"}.
+        Extract all English lexemes that appear in the user input.
+        Search for multi-word lexemes (e.g. phrasal verbs and phrasemes) in addition to single-word lexemes.
+        Exclude proper names.
+        Treat different forms (e.g., verb and noun) as one lexeme.
 
-        If you suspect a genuine spelling typo, add a short note to `typo_note`.
-        Not a typo:
-          - informal usage
-          - colloquial expressions
-          - contractions such as "wanna" or "gonna"
-          - UK-only spelling variants
+        Output `items`: a list of objects. For each extracted lexeme, create one item:
+          - `item.lexeme` — the lexeme in its base form
+          - `item.example` — the full sentence from the user input where the lexeme occurs
+          - `item.cefr` — estimate the lexeme's CEFR level.
 
-        Fill `mode` to:
-          - `LEXEME`, only if all of the following are true:
-            - Q is a single word, a fixed phraseme, or a short, idiomatic, highly common sentence
-            - Q contains no proper names of people
-            - WORD_COUNT(Q) ≤ 5
-          - `TEXT`, otherwise
+        Before extracting the sentence, correct its grammar and spelling first;
+        ensure proper sentence capitalisation and punctuation;
+        don't correct contractions;
+        don't correct local variants;
+        keep the lexeme unchanged where possible.
+        If unavailable, set `item.example` to null.
+    """).strip()
+)
 
-        If `mode` = `LEXEME`, add Q in full to `cards` as a single entry,
-        filling it according to the `Card` filling rules. Omit other root fields.
+LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
+    textwrap.dedent("""
+        You are a translator and dictionary.
+        Informal language and swear words are allowed when necessary.
+        Do not explain your actions. Output ONLY JSON matching the schema.
+        Between UK and US variants, choose UK.
 
-        Otherwise, if `mode` = `TEXT`, fill the root fields:
-          - `translation` — to Russian if Q is in English, or to English if Q is in Russian
-          - `rp` — British RP transcription without slashes, only if Q is in English and WORD_COUNT(Q) ≤ 10
-          - `cards` — list all English lexemes at the level {{ level }} or higher that appear in Q if Q is in English.
-            Extract multi-word lexemes (e.g. phrasal verbs and phrasemes) in addition to single words.
-            Exclude proper names.
-            Fill each card according to the `Card` filling rules.
-            Treat different forms (e.g., verb and noun) as one lexeme
-
-        `Card` filling rules (for the current card C):
-          - Fill `C.lexeme` according to the `Lexeme` filling rules
-          - Fill `C.translations` with an exhaustive list of translations,
-            one translation per list item,
-            including those outside Q's context, following the `Lexeme` filling rules
-          - Fill `C.example` with the full sentence where the lexeme occurs in Q,
-            correcting grammar and spelling beforehand;
-            ensure proper sentence capitalisation and punctuation;
-            don't correct contractions;
-            don't correct local variants;
-            leave the lexeme as is where possible;
-            set to null if unavailable
+        You will be given an English lexeme (L).
+        First, normalise it to its base form and fill the `lexeme` object according to the `Lexeme` filling rules.
+        Then translate it to Russian.
+        Provide an exhaustive list of translations.
 
         `Lexeme` filling rules (for the current lexeme L):
           - `text` — required; the lexeme in its base form
-          - `language` — required
-          - `rp` — list of possible British RP transcription of L, without slashes; only if L is English
-          - `past_simple` and `past_participle` — only if Q is in English and L is an irregular word
+          - `language` — required; set to ENGLISH
+          - `rp` — list of possible British RP transcription of L, without slashes
+          - `past_simple` and `past_participle` — only if L is an irregular verb
+
+        For each translation in `translations`:
+          - `text` — required; the Russian translation
+          - `language` — required; set to RUSSIAN
+          - Do not include `rp`, `past_simple`, or `past_participle`
     """).strip()
 )
 
@@ -160,98 +294,36 @@ EXAMPLE_INSTRUCTIONS = JINJA_ENV.from_string(
 )
 
 
-def _format_cli_card(card: Card, idx: int) -> Text:
-    t = Text()
-    t.append(f'[{idx}]', style='bold')
-    t.append(' ')
-
-    t.append(card.lexeme.text, style='bold')
-    for rp in card.lexeme.rp:
-        t.append(' ')
-        t.append(f'/{rp}/', style='bold italic')
-
-    def add_kv(k: str, v: str | None) -> None:
-        if v:
-            t.append('\n  ')
-            t.append(f'{k}:', style='dim')
-            t.append(' ')
-            t.append(v)
-
-    add_kv('PAST SIMPLE', card.lexeme.past_simple)
-    add_kv('PAST PARTICIPLE', card.lexeme.past_participle)
-
-    for x in card.translations:
-        t.append('\n  - ')
-        t.append(x.text)
-        for rp in x.rp:
-            t.append(' ')
-            t.append(f'/{rp}/', style='italic')
-
-    if card.example:
-        t.append('\n\n  > ')
-        t.append(card.example, style='italic')
-
-    return t
+def print_identified_language(lang_data: LanguageDetectionResponse) -> None:
+    CON.print(f'Language detected: {lang_data.language}')
+    CON.print()
 
 
-def _format_header(cfg: argparse.Namespace, r: TranslatorResponse) -> Text | None:
-    t = Text()
-    first = True
-
-    def add_skip() -> None:
-        nonlocal first
-        if not first:
-            t.append('\n\n')
-        first = False
-
-    def add_kv(k: str, v: str | None) -> None:
-        if v:
-            add_skip()
-            t.append(f'{k}:', style='dim')
-            t.append(' ')
-            t.append(v)
-
-    if cfg.debug and r.mode is not None:
-        add_kv('MODE', r.mode)
-
-    if r.language == Language.OTHER:
-        add_skip()
-        t.append('UNSUPPORTED LANGUAGE')
-
-    add_kv('TYPO NOTE', r.typo_note)
-
-    if r.rp:
-        add_skip()
-        t.append(f'/{r.rp}/', style='italic')
-
-    if r.translation:
-        add_skip()
-        t.append(r.translation)
-
-    return t if not first else None
+def print_typo_note(typo_note: str | None) -> None:
+    if not typo_note:
+        return
+    CON.print()
+    CON.print('TYPO NOTE', style='bold')
+    CON.print(typo_note)
 
 
-def print_response(cfg: argparse.Namespace, r: TranslatorResponse) -> None:
-    first = True
+def print_translation(translation_data: TranslationResponse) -> None:
+    if translation_data.rp:
+        CON.print(f'/{translation_data.rp}/', style='italic')
+        CON.print()
+    CON.print(translation_data.translation, markup=False)
+    CON.print()
 
-    def print_skip() -> None:
-        nonlocal first
-        if not first:
-            CON.print()
-        first = False
 
-    header = _format_header(cfg, r)
-    if header is not None:
-        print_skip()
-        CON.print(header, markup=False)
-
-    if len(r.cards) > 0:
-        print_skip()
-        CON.print('CARDS', style='bold underline')
-
-    for idx, card in enumerate(r.cards, 1):
-        print_skip()
-        CON.print(_format_cli_card(card, idx), markup=False)
+def print_extracted_lexemes(items: list[LexemeExtractionResponse.Item]) -> None:
+    if not items:
+        CON.print('No lexemes for memorisation found')
+        return
+    CON.print('LEXEMES', style='bold underline')
+    for idx, item in enumerate(items, 1):
+        CON.print(f'[{idx}] {item.lexeme} ({item.cefr})', style='bold')
+        if item.example:
+            CON.print(f'  > {item.example}', style='italic')
 
 
 class ConfirmResult(Enum):
@@ -293,25 +365,15 @@ def to_db_card(card) -> db_types.Card:
 def make_example(cfg: argparse.Namespace, card: db_types.Card, previous_examples: list[str]) -> None:
     client = OpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
     instructions = EXAMPLE_INSTRUCTIONS.render(previous_examples=previous_examples)
-
-    if cfg.debug:
-        CON.print(f'INSTRUCTIONS:\n{instructions}')
-
-    kwargs = {
-        'model': cfg.model,
-        'instructions': instructions,
-        'input': card.lexeme,
-        'text_format': ExampleResponse,
-    }
-
-    if cfg.reason != ReasoningLevel.UNSUPPORTED:
-        kwargs['reasoning'] = {'effort': cfg.reason}
-
-    resp = client.responses.parse(**kwargs)
-
-    if resp.output_parsed is None:
-        raise SystemExit('AI response could not be parsed')
-    data: ExampleResponse = resp.output_parsed
+    data: ExampleResponse = _responses_parse(
+        cfg,
+        client,
+        step=f'EXAMPLE: {card.lexeme}',
+        instructions=instructions,
+        user_input=card.lexeme,
+        text_format=ExampleResponse,
+        model=cfg.model,
+    )
     card.example = [data.example] if data.example is not None else []
 
 
@@ -364,26 +426,35 @@ def save_card(cfg: argparse.Namespace, card: db_types.Card) -> None:
         sys.exit(2)
 
 
-def save_cards(cfg: argparse.Namespace, cards: list[db_types.Card]) -> None:
-    for idx, card in enumerate(cards, 1):
-        previous_examples = []
+def save_extracted_lexemes(cfg: argparse.Namespace, client: OpenAI, items: list[LexemeExtractionResponse.Item]) -> None:
+    for idx, item in enumerate(items, 1):
+        lexeme_text = item.lexeme.strip()
+        tr = translate_lexeme(cfg, client, lexeme_text=lexeme_text)
+        card = Card(
+            lexeme=tr.lexeme,
+            translations=tr.translations,
+            example=item.example,
+        )
+        db_card = to_db_card(card)
+
+        previous_examples: list[str] = []
         proceed = True
         while proceed:
             proceed = False
-            CON.print()
-            CON.print(db_types.format_card(card, idx), markup=False)
+            CON.print(db_types.format_card(db_card, idx), markup=False)
             CON.print()
             res = confirm('Save?')
+            CON.print()
             if res == ConfirmResult.QUIT:
                 CON.print('Skipping remaining cards')
                 return
             if res == ConfirmResult.YES:
-                save_card(cfg, card)
+                save_card(cfg, db_card)
             if res == ConfirmResult.EXAMPLE:
                 proceed = True
-                if len(card.example) > 0:
-                    previous_examples += card.example
-                make_example(cfg, card, previous_examples)
+                if len(db_card.example) > 0:
+                    previous_examples += db_card.example
+                make_example(cfg, db_card, previous_examples)
 
 
 def read_interactively() -> str:
@@ -409,12 +480,8 @@ def work() -> int:
         print_config(cfg)
         return 0
 
-    if cfg.show_schema:
-        CON.print(json.dumps(TranslatorResponse.model_json_schema(), indent=2))
-        return 0
-
     query = ' '.join(cfg.query).strip()
-    no_query_error = SystemExit('You must provide a query or use --show-schema')
+    no_query_error = SystemExit('You must provide a query')
     if not query:
         if not sys.stdin.isatty():
             query = sys.stdin.read().strip()
@@ -426,41 +493,31 @@ def work() -> int:
         raise no_query_error
 
     client = OpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
-    instructions = TRANSLATION_INSTRUCTIONS.render(
-        word_count=len(query.split()),
-        level=cfg.level,
-    )
-    if cfg.debug:
-        CON.print(f'INSTRUCTIONS:\n{instructions}\n')
+    lang_data = detect_language(cfg, client, query)
+    print_identified_language(lang_data)
 
-    start_time = time.perf_counter()
+    if lang_data.language == Language.OTHER:
+        CON.print()
+        CON.print('UNSUPPORTED LANGUAGE')
+        return 0
 
-    kwargs = {
-        'model': cfg.model,
-        'instructions': instructions,
-        'input': query,
-        'text_format': TranslatorResponse,
-    }
+    translation_data = translate_text(cfg, client, query=query, source_language=lang_data.language)
+    print_translation(translation_data)
+    print_typo_note(translation_data.typo_note)
 
-    if cfg.reason != ReasoningLevel.UNSUPPORTED:
-        kwargs['reasoning'] = {'effort': cfg.reason}
+    lexeme_items: list[LexemeExtractionResponse.Item] | None = None
+    if lang_data.language == Language.ENGLISH:
+        lexeme_data = extract_lexemes(cfg, client, query=query)
+        lexeme_items = [item for item in lexeme_data.items if item.cefr >= cfg.level]
 
-    resp = client.responses.parse(**kwargs)
+    if lexeme_items is not None:
+        print_extracted_lexemes(lexeme_items)
 
-    elapsed = time.perf_counter() - start_time
-    CON.print(f'{cfg.model} responded in {elapsed:.1f}s\n')
-
-    if resp.output_parsed is None:
-        raise SystemExit('AI response could not be parsed')
-
-    data: TranslatorResponse = resp.output_parsed
-    print_response(cfg, data)
-
-    english_cards = [to_db_card(x) for x in data.cards if x.lexeme.language == Language.ENGLISH]
-    if sys.stdin.isatty() and english_cards and cfg.db_conn_string:
+    if sys.stdin.isatty() and cfg.db_conn_string and lexeme_items:
         CON.print()
         CON.print('SAVING CARDS', style='bold underline')
-        save_cards(cfg, english_cards)
+        CON.print()
+        save_extracted_lexemes(cfg, client, lexeme_items)
     return 0
 
 
