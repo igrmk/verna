@@ -4,6 +4,7 @@ from prompt_toolkit import Application
 from prompt_toolkit.filters import Condition, has_focus
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import Layout, HSplit, VSplit, Window, FormattedTextControl, ScrollablePane
+from prompt_toolkit.layout.containers import Container
 from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.widgets import Frame, TextArea
 from prompt_toolkit.styles import Style
@@ -378,19 +379,25 @@ class CardEditor:
 
     def _create_form_row(self, idx: int, label: str, field: TextArea) -> VSplit:
         # Wrap field with padding and dynamic background (only when editing this field)
-        def get_style(i: int = idx) -> str:
-            return 'class:field-editing' if self.form_editing and self.form_field_idx == i else ''
+        def get_style() -> str:
+            return 'class:field-editing' if self.form_editing and self.form_field_idx == idx else ''
+
+        def get_label_text() -> str:
+            return f' {"►" if self.editing_idx is not None and idx == self.form_field_idx else " "} {label}: '
+
+        def get_label_style() -> str:
+            return self._get_form_label_style(idx)
 
         field_with_padding = VSplit([
-            Window(width=1, style=lambda i=idx: get_style(i)),
+            Window(width=1, style=get_style),
             field,
-            Window(width=1, style=lambda i=idx: get_style(i)),
-        ], style=lambda i=idx: get_style(i))
+            Window(width=1, style=get_style),
+        ], style=get_style)
         return VSplit([
             Window(
-                FormattedTextControl(text=lambda l=label, i=idx: f' {"►" if self.editing_idx is not None and i == self.form_field_idx else " "} {l}: '),
+                FormattedTextControl(text=get_label_text),
                 width=Dimension.exact(20),
-                style=lambda i=idx: self._get_form_label_style(i),
+                style=get_label_style,
                 dont_extend_width=True,
             ),
             field_with_padding,
@@ -405,7 +412,7 @@ class CardEditor:
             text=lambda: ' EDITING' if self.editing_idx is not None else ' PREVIEW'
         )
 
-        form_rows = [
+        form_rows: list[Container] = [
             Window(edit_label_control, height=1, style='class:label'),
             Window(height=1, char='─', style='class:dim'),
         ]
