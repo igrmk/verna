@@ -338,10 +338,12 @@ def print_extracted_lexemes(items: list[LexemeExtractionResponse.Item]) -> None:
         CON.print('No lexemes for memorisation found')
         return
     CON.print('LEXEMES', style='bold underline')
+    CON.print()
     for idx, item in enumerate(items, 1):
         CON.print(f'[{idx}] {item.lexeme} ({item.cefr})', style='bold')
         if item.example:
             CON.print(f'  > {item.example}', style='italic')
+        CON.print()
 
 
 class ConfirmResult(Enum):
@@ -559,7 +561,6 @@ def work() -> int:
         print_extracted_lexemes(lexeme_items)
 
     if sys.stdin.isatty() and cfg.db_conn_string and lexeme_items:
-        CON.print()
         CON.print('SAVING CARDS', style='bold underline')
         CON.print()
         save_extracted_lexemes(cfg, client, lexeme_items)
