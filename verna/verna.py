@@ -239,7 +239,8 @@ LEXEME_EXTRACTION_INSTRUCTIONS = JINJA_ENV.from_string(
           - `item.lexeme` — the lexeme in its base form;
              use the plural if it is the standard form for the meaning in the sentence
              (e.g., scissors, or spoils as in "the spoils of victory")
-          - `item.example` — the full sentence from the user input where the lexeme occurs
+          - `item.example` — the full sentence from the user input where the lexeme occurs,
+             do not include it if it is not a sentence
           - `item.cefr` — estimate the lexeme's CEFR level.
 
         Before extracting the example sentence, correct its grammar and spelling first;
