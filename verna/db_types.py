@@ -6,7 +6,6 @@ from rich.text import Text
 class Card:
     lexeme: str
     rp: list[str]
-    base_form: str | None
     past_simple: str | None
     past_participle: str | None
     translations: list[str]
@@ -30,7 +29,6 @@ def format_card(card: Card, idx: int) -> Text:
             t.append(' ')
             t.append(v)
 
-    add_kv('BASE FORM', card.base_form)
     add_kv('PAST SIMPLE', card.past_simple)
     add_kv('PAST PARTICIPLE', card.past_participle)
 

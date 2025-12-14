@@ -61,7 +61,6 @@ The `cards` table stores vocabulary cards:
 | Column            | Type        | Description                                |
 |-------------------|-------------|--------------------------------------------|
 | `id`              | bigserial   | Primary key                                |
-| `base_form`       | text        | Base form of the word                      |
 | `created_at`      | timestamptz | Creation timestamp                         |
 | `lexeme`          | text        | The word/phrase (unique, case-insensitive) |
 | `rp`              | text[]      | British RP transcriptions                  |

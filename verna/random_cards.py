@@ -63,7 +63,6 @@ def fetch_random_cards(conn, limit: int) -> list[db_types.Card]:
             db_types.Card(
                 lexeme=row[0],
                 rp=row[1],
-                base_form=None,
                 past_simple=row[2],
                 past_participle=row[3],
                 translations=row[4],

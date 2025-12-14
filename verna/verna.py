@@ -372,7 +372,6 @@ def to_db_card(card) -> db_types.Card:
     return db_types.Card(
         lexeme=card.lexeme.text.strip(),
         rp=card.lexeme.rp,
-        base_form=None,
         past_simple=card.lexeme.past_simple,
         past_participle=card.lexeme.past_participle,
         translations=[t.text.strip() for t in card.translations],
