@@ -176,14 +176,21 @@ def extract_lexemes(cfg: argparse.Namespace, client: OpenAI, *, query: str) -> L
     )
 
 
-def translate_lexeme(cfg: argparse.Namespace, client: OpenAI, *, lexeme_text: str) -> LexemeTranslationResponse:
-    instructions = LEXEME_TRANSLATION_INSTRUCTIONS.render()
+def translate_lexeme(
+    cfg: argparse.Namespace,
+    client: OpenAI,
+    *,
+    lexeme_text: str,
+    example: str | None = None,
+) -> LexemeTranslationResponse:
+    instructions = LEXEME_TRANSLATION_INSTRUCTIONS.render(example=example)
+    user_input = f'{lexeme_text}\nExample: {example}' if example else lexeme_text
     return _responses_parse(
         cfg,
         client,
         step='LEXEME TRANSLATION',
         instructions=instructions,
-        user_input=lexeme_text,
+        user_input=user_input,
         text_format=LexemeTranslationResponse,
         model=cfg.model_translate_lexeme or cfg.model,
     )
@@ -221,8 +228,7 @@ LEXEME_EXTRACTION_INSTRUCTIONS = JINJA_ENV.from_string(
     textwrap.dedent("""
         You are a dictionary and lexeme extractor.
         Informal language and swear words are allowed when necessary.
-        Do not explain your actions. Output ONLY JSON matching the schema.
-        Between UK and US variants, choose UK.
+        Prefer UK spelling over US spelling
 
         Extract all English lexemes that appear in the user input.
         Search for multi-word lexemes (e.g. phrasal verbs and phrasemes) in addition to single-word lexemes.
@@ -230,11 +236,13 @@ LEXEME_EXTRACTION_INSTRUCTIONS = JINJA_ENV.from_string(
         Treat different forms (e.g., verb and noun) as one lexeme.
 
         Output `items`: a list of objects. For each extracted lexeme, create one item:
-          - `item.lexeme` — the lexeme in its base form
+          - `item.lexeme` — the lexeme in its base form;
+             use the plural if it is the standard form for the meaning in the sentence
+             (e.g., scissors, or spoils as in "the spoils of victory")
           - `item.example` — the full sentence from the user input where the lexeme occurs
           - `item.cefr` — estimate the lexeme's CEFR level.
 
-        Before extracting the sentence, correct its grammar and spelling first;
+        Before extracting the example sentence, correct its grammar and spelling first;
         ensure proper sentence capitalisation and punctuation;
         don't correct contractions;
         don't correct local variants;
@@ -251,7 +259,12 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
         Between UK and US variants, choose UK.
 
         You will be given an English lexeme (L).
-        First, normalise it to its base form and fill the `lexeme` object according to the `Lexeme` filling rules.
+        {% if example %}
+        You will also be given an example sentence showing how the lexeme is used.
+        Ensure to include a translation matching the lexeme's meaning from this example.
+        {% endif %}
+        First, normalise it to its base form (use plural if it is the standard form for the meaning in the sentence)
+        and fill the `lexeme` object according to the `Lexeme` filling rules.
         Then translate it to Russian.
         Provide an exhaustive list of translations.
 
@@ -434,7 +447,7 @@ def save_card(cfg: argparse.Namespace, card: db_types.Card) -> None:
 def save_extracted_lexemes(cfg: argparse.Namespace, client: OpenAI, items: list[LexemeExtractionResponse.Item]) -> None:
     for idx, item in enumerate(items, 1):
         lexeme_text = item.lexeme.strip()
-        tr = translate_lexeme(cfg, client, lexeme_text=lexeme_text)
+        tr = translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
         card = Card(
             lexeme=tr.lexeme,
             translations=tr.translations,
