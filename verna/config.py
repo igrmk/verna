@@ -14,6 +14,7 @@ class Sections(StrEnum):
     VERNA = 'verna'
     REMOVE = 'remove'
     AI = 'ai'
+    EDITOR = 'editor'
 
 
 class ReasoningLevel(StrEnum):

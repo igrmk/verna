@@ -22,6 +22,7 @@ verna/
 ├── verna.py          # Main translation CLI (entry point: `verna`)
 ├── random_cards.py   # Daily cards + story generator (entry point: `verna-cards`)
 ├── remove_lexeme.py  # Remove lexeme from DB (entry point: `verna-remove`)
+├── edit.py           # TUI editor for lexemes (entry point: `verna-edit`)
 ├── config.py         # CLI argument parsing and configuration
 ├── db_types.py       # Database card dataclass and formatting
 ├── migrator.py       # Database migration runner
@@ -37,6 +38,7 @@ verna/
 | `verna`        | `verna.verna:main`         | Main translation tool                                |
 | `verna-cards`  | `verna.random_cards:main`  | Fetch random cards, generate story, send to Telegram |
 | `verna-remove` | `verna.remove_lexeme:main` | Remove a lexeme from the database                    |
+| `verna-edit`   | `verna.edit:main`          | TUI editor for searching and editing lexemes         |
 
 ## Main Workflow (`verna`)
 
