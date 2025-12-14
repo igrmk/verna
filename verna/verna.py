@@ -202,7 +202,8 @@ TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
 
         Translate the user input into {{ target_language }} and fill these fields:
           - `translation` — translation of the user input into {{ target_language }}
-          - `typo_note` — if you suspect a genuine spelling typo in the user input, add a short note; otherwise set to null.
+          - `typo_note` — if you suspect a genuine spelling typo in the user input, add a short note;
+            otherwise set to null.
             Not a typo:
               - informal usage
               - colloquial expressions
