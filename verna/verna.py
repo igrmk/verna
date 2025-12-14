@@ -424,6 +424,7 @@ def save_card(cfg: argparse.Namespace, card: db_types.Card) -> None:
                 assert row is not None
                 inserted = row[0]
                 CON.print('Saved' if inserted else 'Merged')
+                CON.print()
             conn.commit()
     except psycopg.Error as e:
         print(f'Failed to save cards to postgres: {e}', file=sys.stderr)
