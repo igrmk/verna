@@ -103,11 +103,18 @@ def _add_ai(p: configargparse.ArgParser) -> None:
         help='AI model ID for language detection (defaults to --model)',
     )
     p.add_argument(
-        '--model-translate',
-        env_var='VERNA_MODEL_TRANSLATE',
+        '--model-translate-text',
+        env_var='VERNA_MODEL_TRANSLATE_TEXT',
         type=str,
         required=False,
         help='AI model ID for whole-text translation (defaults to --model)',
+    )
+    p.add_argument(
+        '--model-translate-lexeme',
+        env_var='VERNA_MODEL_TRANSLATE_LEXEME',
+        type=str,
+        required=False,
+        help='AI model ID for lexeme translation (defaults to --model)',
     )
     p.add_argument(
         '--model-extract',
@@ -133,7 +140,7 @@ def _add_ai(p: configargparse.ArgParser) -> None:
         const=default_think_reasoning_level,
         help=f'Make AI think (alias for --reason {default_think_reasoning_level})',
     )
-    p.set_defaults(reason=ReasoningLevel.MINIMAL)
+    p.set_defaults(reason=ReasoningLevel.LOW)
 
 
 def _add_tg(p: configargparse.ArgParser, *, require_tg: bool) -> None:

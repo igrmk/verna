@@ -159,7 +159,7 @@ def translate_text(
         instructions=instructions,
         user_input=query,
         text_format=TranslationResponse,
-        model=cfg.model_translate or cfg.model,
+        model=cfg.model_translate_text or cfg.model,
     )
 
 
@@ -185,7 +185,7 @@ def translate_lexeme(cfg: argparse.Namespace, client: OpenAI, *, lexeme_text: st
         instructions=instructions,
         user_input=lexeme_text,
         text_format=LexemeTranslationResponse,
-        model=cfg.model_translate or cfg.model,
+        model=cfg.model_translate_lexeme or cfg.model,
     )
 
 
