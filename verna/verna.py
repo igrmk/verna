@@ -3,10 +3,13 @@ import json
 import sys
 import textwrap
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from verna import db_types
 from enum import Enum, auto
 import psycopg
 from openai import OpenAI
+from openai.types.responses import ResponseInputParam
+from openai.types.shared_params import Reasoning
 from pydantic import BaseModel, Field
 from prompt_toolkit import PromptSession
 from prompt_toolkit.key_binding import KeyBindings
@@ -83,7 +86,7 @@ def _responses_parse(
     step: str,
     instructions: str,
     user_input: str,
-    text_format,
+    text_format: type[BaseModel],
     model: str | None = None,
 ):
     model_id = model or cfg.model
@@ -101,22 +104,22 @@ def _responses_parse(
 
     start_time = time.perf_counter()
 
-    kwargs = {
-        'model': model_id,
-        'instructions': GENERAL_INSTRUCTIONS,
-        'input': [
-            {'role': 'system', 'content': instructions},
-            {'role': 'user', 'content': user_input},
-        ],
-        'text_format': text_format,
-    }
-    if cfg.reason != ReasoningLevel.UNSUPPORTED:
-        kwargs['reasoning'] = {'effort': cfg.reason}
+    input_messages: ResponseInputParam = [
+        {'role': 'system', 'content': instructions},
+        {'role': 'user', 'content': user_input},
+    ]
+    reasoning: Reasoning | None = {'effort': cfg.reason} if cfg.reason != ReasoningLevel.UNSUPPORTED else None
 
-    resp = client.responses.parse(**kwargs)
+    resp = client.responses.parse(
+        model=model_id,
+        instructions=GENERAL_INSTRUCTIONS,
+        input=input_messages,
+        text_format=text_format,
+        reasoning=reasoning,
+    )
 
     elapsed = time.perf_counter() - start_time
-    CON.print(f'{model_id} responded in {elapsed:.1f}s', style='dim grey50')
+    CON.print(f'[{step}] {model_id} responded in {elapsed:.1f}s', style='dim grey50')
 
     if resp.output_parsed is None:
         raise SystemExit(f'AI response could not be parsed ({step})')
@@ -178,7 +181,7 @@ def translate_lexeme(cfg: argparse.Namespace, client: OpenAI, *, lexeme_text: st
     return _responses_parse(
         cfg,
         client,
-        step=f'LEXEME TRANSLATION: {lexeme_text}',
+        step='LEXEME TRANSLATION',
         instructions=instructions,
         user_input=lexeme_text,
         text_format=LexemeTranslationResponse,
@@ -497,18 +500,24 @@ def work() -> int:
     print_identified_language(lang_data)
 
     if lang_data.language == Language.OTHER:
-        CON.print()
         CON.print('UNSUPPORTED LANGUAGE')
         return 0
 
-    translation_data = translate_text(cfg, client, query=query, source_language=lang_data.language)
+    if lang_data.language == Language.ENGLISH:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            translation_future = executor.submit(
+                translate_text, cfg, client, query=query, source_language=lang_data.language
+            )
+            lexeme_future = executor.submit(extract_lexemes, cfg, client, query=query)
+            translation_data = translation_future.result()
+            lexeme_data = lexeme_future.result()
+        lexeme_items = [item for item in lexeme_data.items if item.cefr >= cfg.level]
+    else:
+        translation_data = translate_text(cfg, client, query=query, source_language=lang_data.language)
+        lexeme_items = None
+
     print_translation(translation_data)
     print_typo_note(translation_data.typo_note)
-
-    lexeme_items: list[LexemeExtractionResponse.Item] | None = None
-    if lang_data.language == Language.ENGLISH:
-        lexeme_data = extract_lexemes(cfg, client, query=query)
-        lexeme_items = [item for item in lexeme_data.items if item.cefr >= cfg.level]
 
     if lexeme_items is not None:
         print_extracted_lexemes(lexeme_items)
