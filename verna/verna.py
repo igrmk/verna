@@ -444,8 +444,30 @@ def save_card(cfg: argparse.Namespace, card: db_types.Card) -> None:
         sys.exit(2)
 
 
+def prompt_card_selection(items: list[LexemeExtractionResponse.Item]) -> int | None:
+    while True:
+        try:
+            ans = input('Card number (or q to quit): ').strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            return None
+        if ans == 'q':
+            return None
+        try:
+            num = int(ans)
+            if 1 <= num <= len(items):
+                return num - 1
+            CON.print(f'Please enter a number between 1 and {len(items)}')
+        except ValueError:
+            CON.print('Please enter a valid number or q to quit')
+
+
 def save_extracted_lexemes(cfg: argparse.Namespace, client: OpenAI, items: list[LexemeExtractionResponse.Item]) -> None:
-    for idx, item in enumerate(items, 1):
+    while True:
+        idx = prompt_card_selection(items)
+        if idx is None:
+            return
+        CON.print()
+        item = items[idx]
         lexeme_text = item.lexeme.strip()
         tr = translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
         card = Card(
@@ -459,12 +481,11 @@ def save_extracted_lexemes(cfg: argparse.Namespace, client: OpenAI, items: list[
         proceed = True
         while proceed:
             proceed = False
-            CON.print(db_types.format_card(db_card, idx), markup=False)
+            CON.print(db_types.format_card(db_card, idx + 1), markup=False)
             CON.print()
             res = confirm('Save?')
             CON.print()
             if res == ConfirmResult.QUIT:
-                CON.print('Skipping remaining cards')
                 return
             if res == ConfirmResult.YES:
                 save_card(cfg, db_card)

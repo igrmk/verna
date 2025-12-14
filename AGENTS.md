@@ -25,7 +25,6 @@ verna/
 ├── config.py         # CLI argument parsing and configuration
 ├── db_types.py       # Database card dataclass and formatting
 ├── migrator.py       # Database migration runner
-├── upper_str_enum.py # Helper for uppercase string enums
 ├── create_spec.py    # DigitalOcean App Platform spec generator
 ├── verna.ini         # Default configuration file
 └── migrations/       # SQL migration files (001_*, 002_*, ...)
@@ -92,6 +91,7 @@ Run migrations with: `python -m verna.migrator`
 - Line length: 120 characters
 - Quote style: single quotes (') or triple double quotes (""")
 - Type hints: Python 3.12+ style (`list[str]`, `str | None`)
+- Commit style: conventional
 
 ## Testing
 
