@@ -54,15 +54,17 @@ class CardEditor:
 
         self.message_control = FormattedTextControl(text=lambda: self.message)
 
-        self.style = Style.from_dict({
-            'frame.border': 'fg:ansiblue',
-            'selected': 'reverse',
-            'lexeme': 'bold fg:ansigreen',
-            'dim': 'fg:ansibrightblack',
-            'label': 'fg:ansicyan',
-            'label-selected': 'fg:ansicyan bold reverse',
-            'field-editing': 'bg:#252525',
-        })
+        self.style = Style.from_dict(
+            {
+                'frame.border': 'fg:ansiblue',
+                'selected': 'reverse',
+                'lexeme': 'bold fg:ansigreen',
+                'dim': 'fg:ansibrightblack',
+                'label': 'fg:ansicyan',
+                'label-selected': 'fg:ansicyan bold reverse',
+                'field-editing': 'bg:#252525',
+            }
+        )
 
     def _in_any_form_field(self) -> bool:
         if self.app is None:
@@ -388,20 +390,25 @@ class CardEditor:
         def get_label_style() -> str:
             return self._get_form_label_style(idx)
 
-        field_with_padding = VSplit([
-            Window(width=1, style=get_style),
-            field,
-            Window(width=1, style=get_style),
-        ], style=get_style)
-        return VSplit([
-            Window(
-                FormattedTextControl(text=get_label_text),
-                width=Dimension.exact(20),
-                style=get_label_style,
-                dont_extend_width=True,
-            ),
-            field_with_padding,
-        ])
+        field_with_padding = VSplit(
+            [
+                Window(width=1, style=get_style),
+                field,
+                Window(width=1, style=get_style),
+            ],
+            style=get_style,
+        )
+        return VSplit(
+            [
+                Window(
+                    FormattedTextControl(text=get_label_text),
+                    width=Dimension.exact(20),
+                    style=get_label_style,
+                    dont_extend_width=True,
+                ),
+                field_with_padding,
+            ]
+        )
 
     def create_layout(self) -> Layout:
         help_control = FormattedTextControl(text=self._get_help_text)
@@ -423,13 +430,15 @@ class CardEditor:
 
         form = HSplit(form_rows)
 
-        body = HSplit([
-            Frame(self.search_area, title='Search Lexemes', height=Dimension.exact(3)),
-            Frame(results_pane, title='Results'),
-            Frame(form, title='Editor'),
-            Window(content=self.message_control, height=1),
-            Window(content=help_control, height=1, style='class:dim'),
-        ])
+        body = HSplit(
+            [
+                Frame(self.search_area, title='Search Lexemes', height=Dimension.exact(3)),
+                Frame(results_pane, title='Results'),
+                Frame(form, title='Editor'),
+                Window(content=self.message_control, height=1),
+                Window(content=help_control, height=1, style='class:dim'),
+            ]
+        )
 
         return Layout(body, focused_element=self.search_area)
 
