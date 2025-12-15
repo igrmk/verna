@@ -447,56 +447,65 @@ def save_card(cfg: argparse.Namespace, card: db_types.Card) -> None:
         sys.exit(2)
 
 
-def prompt_card_selection(items: list[LexemeExtractionResponse.Item]) -> int | None:
+def prompt_card_selection(items: list[LexemeExtractionResponse.Item]) -> list[int]:
     while True:
         try:
-            ans = input('Card number (or q to quit): ').strip().lower()
+            ans = input('Card number (a for all, q to quit): ').strip().lower()
         except (EOFError, KeyboardInterrupt):
-            return None
+            return []
         if ans == 'q':
-            return None
+            return []
+        if ans == 'a':
+            return list(range(len(items)))
         try:
             num = int(ans)
             if 1 <= num <= len(items):
-                return num - 1
+                return [num - 1]
             CON.print(f'Please enter a number between 1 and {len(items)}')
         except ValueError:
-            CON.print('Please enter a valid number or q to quit')
+            CON.print('Please enter a valid number, a for all, or q to quit')
+
+
+def save_single_lexeme(cfg: argparse.Namespace, client: OpenAI, item: LexemeExtractionResponse.Item, idx: int) -> bool:
+    """Save a single lexeme. Returns False if user wants to quit."""
+    CON.print()
+    lexeme_text = item.lexeme.strip()
+    tr = translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
+    card = Card(
+        lexeme=tr.lexeme,
+        translations=tr.translations,
+        example=item.example,
+    )
+    db_card = to_db_card(card)
+
+    previous_examples: list[str] = []
+    proceed = True
+    while proceed:
+        proceed = False
+        CON.print(db_types.format_card(db_card, idx + 1), markup=False)
+        CON.print()
+        res = confirm('Save?')
+        CON.print()
+        if res == ConfirmResult.QUIT:
+            return False
+        if res == ConfirmResult.YES:
+            save_card(cfg, db_card)
+        if res == ConfirmResult.EXAMPLE:
+            proceed = True
+            if len(db_card.example) > 0:
+                previous_examples += db_card.example
+            make_example(cfg, db_card, previous_examples)
+    return True
 
 
 def save_extracted_lexemes(cfg: argparse.Namespace, client: OpenAI, items: list[LexemeExtractionResponse.Item]) -> None:
     while True:
-        idx = prompt_card_selection(items)
-        if idx is None:
+        indices = prompt_card_selection(items)
+        if not indices:
             return
-        CON.print()
-        item = items[idx]
-        lexeme_text = item.lexeme.strip()
-        tr = translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
-        card = Card(
-            lexeme=tr.lexeme,
-            translations=tr.translations,
-            example=item.example,
-        )
-        db_card = to_db_card(card)
-
-        previous_examples: list[str] = []
-        proceed = True
-        while proceed:
-            proceed = False
-            CON.print(db_types.format_card(db_card, idx + 1), markup=False)
-            CON.print()
-            res = confirm('Save?')
-            CON.print()
-            if res == ConfirmResult.QUIT:
+        for idx in indices:
+            if not save_single_lexeme(cfg, client, items[idx], idx):
                 return
-            if res == ConfirmResult.YES:
-                save_card(cfg, db_card)
-            if res == ConfirmResult.EXAMPLE:
-                proceed = True
-                if len(db_card.example) > 0:
-                    previous_examples += db_card.example
-                make_example(cfg, db_card, previous_examples)
 
 
 def read_interactively() -> str:
