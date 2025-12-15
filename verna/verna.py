@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from verna import db_types
 from enum import Enum, auto
 import psycopg
-from openai import OpenAI
+from openai import APITimeoutError, OpenAI
 from openai.types.responses import ResponseInputParam
 from openai.types.shared_params import Reasoning
 from pydantic import BaseModel, Field
@@ -79,6 +79,9 @@ class ExampleResponse(BaseModel):
     example: str | None
 
 
+TIMEOUT = 10
+
+
 def _responses_parse(
     cfg: argparse.Namespace,
     client: OpenAI,
@@ -102,21 +105,33 @@ def _responses_parse(
         CON.print()
         CON.print(f'INSTRUCTIONS:\n{instructions}\n', style='dim')
 
-    start_time = time.perf_counter()
-
     input_messages: ResponseInputParam = [
         {'role': 'system', 'content': instructions},
         {'role': 'user', 'content': user_input},
     ]
     reasoning: Reasoning | None = {'effort': cfg.reason} if cfg.reason != ReasoningLevel.UNSUPPORTED else None
 
-    resp = client.responses.parse(
-        model=model_id,
-        instructions=GENERAL_INSTRUCTIONS,
-        input=input_messages,
-        text_format=text_format,
-        reasoning=reasoning,
-    )
+    while True:
+        start_time = time.perf_counter()
+        try:
+            resp = client.responses.parse(
+                model=model_id,
+                instructions=GENERAL_INSTRUCTIONS,
+                input=input_messages,
+                text_format=text_format,
+                reasoning=reasoning,
+                timeout=TIMEOUT,
+            )
+            break
+        except APITimeoutError:
+            CON.print(f'[{step}] Request timed out after {TIMEOUT}s', style='yellow')
+            try:
+                ans = input('Retry? [Y/n] ').strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                raise SystemExit('Request timed out')
+            if ans in ('', 'y'):
+                continue
+            raise SystemExit('Request timed out')
 
     elapsed = time.perf_counter() - start_time
     CON.print(f'[{step}] {model_id} responded in {elapsed:.1f}s', style='dim grey50')
