@@ -268,6 +268,7 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
         and fill the `lexeme` object according to the `Lexeme` filling rules.
         Then translate it to Russian.
         Provide an exhaustive list of translations.
+        Prefer masculine adjectives over other genders.
 
         `Lexeme` filling rules (for the current lexeme L):
           - `text` — required; the lexeme in its base form
