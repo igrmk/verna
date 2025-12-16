@@ -290,7 +290,6 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
         Ensure to include a translation matching the lexeme's meaning from this example (but not only).
         {% endif %}
         Prefer masculine adjectives over other genders.
-
     """).strip()
 )
 
