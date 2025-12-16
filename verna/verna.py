@@ -514,6 +514,9 @@ def save_single_lexeme(cfg: argparse.Namespace, client: OpenAI, item: LexemeExtr
 
 
 def save_extracted_lexemes(cfg: argparse.Namespace, client: OpenAI, items: list[LexemeExtractionResponse.Item]) -> None:
+    if len(items) == 1:
+        save_single_lexeme(cfg, client, items[0], 0)
+        return
     while True:
         indices = prompt_card_selection(items)
         if not indices:
@@ -564,6 +567,12 @@ def work() -> int:
 
     if lang_data.language == Language.OTHER:
         CON.print('UNSUPPORTED LANGUAGE')
+        return 0
+
+    if lang_data.language == Language.ENGLISH and len(query.split()) == 1:
+        if sys.stdin.isatty() and cfg.db_conn_string:
+            item = LexemeExtractionResponse.Item(lexeme=query, example=None, cefr=CefrLevel.C2)
+            save_single_lexeme(cfg, client, item, 0)
         return 0
 
     if lang_data.language == Language.ENGLISH:
