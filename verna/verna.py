@@ -39,7 +39,6 @@ class Language(UpperStrEnum):
 
 class Lexeme(BaseModel):
     text: str
-    language: Language
     rp: list[str] = Field(default_factory=list)
     past_simple: str | None = None
     past_participle: str | None = None
@@ -47,7 +46,7 @@ class Lexeme(BaseModel):
 
 class Card(BaseModel):
     lexeme: Lexeme
-    translations: list[Lexeme]
+    translations: list[str]
     example: str | None
 
 
@@ -72,7 +71,7 @@ class LexemeExtractionResponse(BaseModel):
 
 class LexemeTranslationResponse(BaseModel):
     lexeme: Lexeme
-    translations: list[Lexeme] = Field(default_factory=list)
+    translations: list[str] = Field(default_factory=list)
 
 
 class ExampleResponse(BaseModel):
@@ -287,14 +286,10 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
 
         `Lexeme` filling rules (for the current lexeme L):
           - `text` — required; the lexeme in its base form
-          - `language` — required; set to ENGLISH
           - `rp` — list of possible British RP transcription of L, without slashes
           - `past_simple` and `past_participle` — only if L is an irregular verb
 
-        For each translation in `translations`:
-          - `text` — required; the Russian translation
-          - `language` — required; set to RUSSIAN
-          - Do not include `rp`, `past_simple`, or `past_participle`
+        `translations` — exhaustive list of Russian translations
     """).strip()
 )
 
@@ -392,7 +387,7 @@ def to_db_card(card) -> db_types.Card:
         rp=card.lexeme.rp,
         past_simple=card.lexeme.past_simple,
         past_participle=card.lexeme.past_participle,
-        translations=[t.text.strip() for t in card.translations],
+        translations=[t.strip() for t in card.translations],
         example=[card.example] if card.example is not None else [],
     )
 
@@ -570,9 +565,14 @@ def work() -> int:
         return 0
 
     if lang_data.language == Language.ENGLISH and len(query.split()) == 1:
+        item = LexemeExtractionResponse.Item(lexeme=query, example=None, cefr=CefrLevel.C2)
         if sys.stdin.isatty() and cfg.db_conn_string:
-            item = LexemeExtractionResponse.Item(lexeme=query, example=None, cefr=CefrLevel.C2)
             save_single_lexeme(cfg, client, item, 0)
+        else:
+            tr = translate_lexeme(cfg, client, lexeme_text=query)
+            card = Card(lexeme=tr.lexeme, translations=tr.translations, example=None)
+            db_card = to_db_card(card)
+            CON.print(db_types.format_card(db_card, 1), markup=False)
         return 0
 
     if lang_data.language == Language.ENGLISH:
