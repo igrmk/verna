@@ -276,20 +276,19 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
         You will be given an English lexeme (L).
         {% if example %}
         You will also be given an example sentence showing how the lexeme is used.
-        Ensure to include a translation matching the lexeme's meaning from this example.
+        Ensure to include a translation matching the lexeme's meaning from this example (but not only).
         {% endif %}
         First, normalise it to its base form (use plural if it is the standard form for the meaning in the sentence)
-        and fill the `lexeme` object according to the `Lexeme` filling rules.
-        Then translate it to Russian.
-        Provide an exhaustive list of translations.
-        Prefer masculine adjectives over other genders.
-
-        `Lexeme` filling rules (for the current lexeme L):
+        and fill the `lexeme` object:
           - `text` — required; the lexeme in its base form
-          - `rp` — list of possible British RP transcription of L, without slashes
+          - `rp` — list of possible British RP transcriptions of L, without slashes
           - `past_simple` and `past_participle` — only if L is an irregular verb
 
-        `translations` — exhaustive list of Russian translations
+        Then translate it to Russian and fill
+        `translations` — exhaustive list of Russian translations covering all parts of speech
+        (nouns, verbs, adjectives, adverbs, etc.) but avoiding very close synonyms.
+        Prefer masculine adjectives over other genders.
+
     """).strip()
 )
 
