@@ -276,7 +276,6 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
         You will be given an English lexeme (L).
         {% if example %}
         You will also be given an example sentence showing how the lexeme is used.
-        Ensure to include a translation matching the lexeme's meaning from this example (but not only).
         {% endif %}
         First, normalise it to its base form (use plural if it is the standard form for the meaning in the sentence)
         and fill the `lexeme` object:
@@ -287,6 +286,9 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
         Then translate it to Russian and fill
         `translations` — exhaustive list of Russian translations covering all parts of speech
         (nouns, verbs, adjectives, adverbs, etc.) but avoiding very close synonyms.
+        {% if example %}
+        Ensure to include a translation matching the lexeme's meaning from this example (but not only).
+        {% endif %}
         Prefer masculine adjectives over other genders.
 
     """).strip()
