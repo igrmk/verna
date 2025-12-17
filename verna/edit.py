@@ -20,7 +20,6 @@ class CardEditor:
         self.selected_idx = 0
         self.editing_idx: int | None = None
         self.form_field_idx = 0
-        self.form_editing = False
         self.message = ''
         self.app: Application | None = None
 
@@ -31,11 +30,15 @@ class CardEditor:
             wrap_lines=False,
         )
 
-        self.results_control = FormattedTextControl(text=self._get_results_text, focusable=True)
+        self.results_control = FormattedTextControl(text=self._get_results_text, focusable=True, show_cursor=False)
         self.results_window = Window(content=self.results_control, wrap_lines=True)
 
-        # Create form fields with read_only filter
-        field_readonly = Condition(lambda: not self.form_editing)
+        # Invisible control for form navigation (doesn't show cursor)
+        self.form_nav_control = FormattedTextControl(text='', focusable=True, show_cursor=False)
+        self.form_nav_window = Window(content=self.form_nav_control, height=0)
+
+        # Create form fields with read_only filter (editable only when the field itself is focused)
+        field_readonly = Condition(lambda: not self._in_any_form_field())
         self.field_lexeme = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
         self.field_rp = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
         self.field_past_simple = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
@@ -66,6 +69,11 @@ class CardEditor:
             }
         )
 
+    def _in_form_nav(self) -> bool:
+        if self.app is None:
+            return False
+        return self.app.layout.current_control == self.form_nav_control
+
     def _in_any_form_field(self) -> bool:
         if self.app is None:
             return False
@@ -78,9 +86,8 @@ class CardEditor:
     def _create_key_bindings(self) -> KeyBindings:
         kb = KeyBindings()
 
-        in_form = Condition(self._in_any_form_field)
-        in_form_navigating = Condition(lambda: self._in_any_form_field() and not self.form_editing)
-        in_form_editing = Condition(lambda: self._in_any_form_field() and self.form_editing)
+        in_form_nav = Condition(self._in_form_nav)
+        in_form_editing = Condition(self._in_any_form_field)
         in_results = has_focus(self.results_window)
         in_search = has_focus(self.search_area)
 
@@ -128,52 +135,52 @@ class CardEditor:
         def _focus_search(event):
             event.app.layout.focus(self.search_area)
 
-        # Form navigation mode
-        @kb.add('up', filter=in_form_navigating)
-        @kb.add('k', filter=in_form_navigating)
+        # Form navigation mode (using invisible nav control - no cursor shown)
+        @kb.add('up', filter=in_form_nav)
+        @kb.add('k', filter=in_form_nav)
         def _form_up(event):
             self._form_navigate(-1)
 
-        @kb.add('down', filter=in_form_navigating)
-        @kb.add('j', filter=in_form_navigating)
-        @kb.add('tab', filter=in_form_navigating)
+        @kb.add('down', filter=in_form_nav)
+        @kb.add('j', filter=in_form_nav)
+        @kb.add('tab', filter=in_form_nav)
         def _form_down(event):
             self._form_navigate(1)
 
-        @kb.add('s-tab', filter=in_form_navigating)
+        @kb.add('s-tab', filter=in_form_nav)
         def _form_prev(event):
             self._form_navigate(-1)
 
-        @kb.add('enter', filter=in_form_navigating)
-        @kb.add('i', filter=in_form_navigating)
+        @kb.add('enter', filter=in_form_nav)
+        @kb.add('i', filter=in_form_nav)
         def _form_enter_edit(event):
-            self.form_editing = True
+            # Focus the actual TextArea to show cursor and enable editing
+            _, field = self.form_fields[self.form_field_idx]
+            event.app.layout.focus(field)
             self.message = 'Editing field (Esc to stop)'
 
-        @kb.add('escape', filter=in_form_navigating)
+        @kb.add('escape', filter=in_form_nav)
         def _form_cancel(event):
             self._cancel_editing()
             event.app.layout.focus(self.results_window)
 
-        @kb.add('c-s', filter=in_form)
+        @kb.add('c-s', filter=in_form_nav | in_form_editing)
         def _save(event):
             self._save_edit()
             event.app.layout.focus(self.results_window)
 
-        # Form editing mode
+        # Form editing mode (actual TextArea focused - cursor shown)
         @kb.add('escape', filter=in_form_editing)
         def _form_exit_edit(event):
-            self.form_editing = False
+            event.app.layout.focus(self.form_nav_window)
             self.message = 'Navigate fields (j/k), edit (i/Enter)'
 
         @kb.add('tab', filter=in_form_editing)
         def _form_next_while_editing(event):
-            self.form_editing = False
             self._form_navigate(1)
 
         @kb.add('s-tab', filter=in_form_editing)
         def _form_prev_while_editing(event):
-            self.form_editing = False
             self._form_navigate(-1)
 
         return kb
@@ -181,8 +188,8 @@ class CardEditor:
     def _form_navigate(self, direction: int) -> None:
         self.form_field_idx = (self.form_field_idx + direction) % len(self.form_fields)
         if self.app:
-            _, field = self.form_fields[self.form_field_idx]
-            self.app.layout.focus(field)
+            # Focus the invisible nav control (no cursor) rather than the actual TextArea
+            self.app.layout.focus(self.form_nav_window)
 
     def _load_card_to_form(self, card: Card) -> None:
         self.form_fields[0][1].text = card.lexeme
@@ -206,17 +213,15 @@ class CardEditor:
     def _start_editing(self) -> None:
         self.editing_idx = self.selected_idx
         self.form_field_idx = 0
-        self.form_editing = False
         _, card = self.cards[self.editing_idx]
         self._load_card_to_form(card)
         self.message = 'Navigate fields (j/k), edit (i/Enter)'
         if self.app:
-            _, field = self.form_fields[0]
-            self.app.layout.focus(field)
+            # Focus the invisible nav control (no cursor shown during navigation)
+            self.app.layout.focus(self.form_nav_window)
 
     def _cancel_editing(self) -> None:
         self.editing_idx = None
-        self.form_editing = False
         self.message = 'Edit cancelled'
         self._update_preview()
 
@@ -258,7 +263,6 @@ class CardEditor:
             self.message = f'Error saving: {e}'
 
         self.editing_idx = None
-        self.form_editing = False
         self._update_preview()
 
     def _delete_card(self) -> None:
@@ -368,9 +372,9 @@ class CardEditor:
         return lines
 
     def _get_help_text(self) -> str:
-        if self.form_editing:
+        if self._in_any_form_field():
             return 'Esc: stop editing field | Tab/S-Tab: next/prev field | Ctrl-S: save'
-        if self.editing_idx is not None:
+        if self._in_form_nav():
             return '↑/↓ or j/k: select field | i/Enter: edit field | Ctrl-S: save | Esc: cancel'
         return '↑/↓ or j/k: navigate | Enter: edit | d: delete | /: search | Esc: search | Ctrl-Q: quit'
 
@@ -382,7 +386,7 @@ class CardEditor:
     def _create_form_row(self, idx: int, label: str, field: TextArea) -> VSplit:
         # Wrap field with padding and dynamic background (only when editing this field)
         def get_style() -> str:
-            return 'class:field-editing' if self.form_editing and self.form_field_idx == idx else ''
+            return 'class:field-editing' if self._in_any_form_field() and self.form_field_idx == idx else ''
 
         def get_label_text() -> str:
             return f' {"►" if self.editing_idx is not None and idx == self.form_field_idx else " "} {label}: '
@@ -420,6 +424,7 @@ class CardEditor:
         )
 
         form_rows: list[Container] = [
+            self.form_nav_window,  # Invisible focusable window for form navigation (no cursor)
             Window(edit_label_control, height=1, style='class:label'),
             Window(height=1, char='─', style='class:dim'),
         ]
