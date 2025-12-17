@@ -4,7 +4,18 @@ from prompt_toolkit import Application
 from prompt_toolkit.filters import Condition, has_focus
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.data_structures import Point
-from prompt_toolkit.layout import Layout, HSplit, VSplit, Window, FormattedTextControl, ScrollablePane, ConditionalContainer, Float, FloatContainer, WindowAlign
+from prompt_toolkit.layout import (
+    Layout,
+    HSplit,
+    VSplit,
+    Window,
+    FormattedTextControl,
+    ScrollablePane,
+    ConditionalContainer,
+    Float,
+    FloatContainer,
+    WindowAlign,
+)
 from prompt_toolkit.layout.containers import Container
 from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.widgets import Frame, TextArea
@@ -56,11 +67,17 @@ class CardEditor:
         self.field_past_participle = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
         # Translations and example grow with content
         self.field_translations = TextArea(
-            height=Dimension(min=1), multiline=True, wrap_lines=True, read_only=field_readonly,
+            height=Dimension(min=1),
+            multiline=True,
+            wrap_lines=True,
+            read_only=field_readonly,
             dont_extend_height=True,
         )
         self.field_example = TextArea(
-            height=Dimension(min=1), multiline=True, wrap_lines=True, read_only=field_readonly,
+            height=Dimension(min=1),
+            multiline=True,
+            wrap_lines=True,
+            read_only=field_readonly,
             dont_extend_height=True,
         )
 
@@ -546,11 +563,13 @@ class CardEditor:
     def create_layout(self) -> Layout:
         help_control = FormattedTextControl(text=self._get_help_text)
 
-        results_pane = VSplit([
-            Window(width=1),  # Left margin
-            ScrollablePane(self.results_window),
-            Window(width=1),  # Right margin
-        ])
+        results_pane = VSplit(
+            [
+                Window(width=1),  # Left margin
+                ScrollablePane(self.results_window),
+                Window(width=1),  # Right margin
+            ]
+        )
 
         form_rows: list[Container] = [
             self.form_nav_window,  # Invisible focusable window for form navigation (no cursor)
@@ -562,11 +581,13 @@ class CardEditor:
             if idx == 4:  # After translations (before example)
                 form_rows.append(Window(height=1))
 
-        form = VSplit([
-            Window(width=1),  # Left margin
-            HSplit(form_rows),
-            Window(width=1),  # Right margin
-        ])
+        form = VSplit(
+            [
+                Window(width=1),  # Left margin
+                HSplit(form_rows),
+                Window(width=1),  # Right margin
+            ]
+        )
 
         not_editing = Condition(lambda: not self._is_editing())
 
@@ -576,36 +597,40 @@ class CardEditor:
         results_focused = Condition(self._results_focused)
 
         # Wrap search area with margins
-        search_with_margin = VSplit([
-            Window(width=1),  # Left margin
-            self.search_area,
-            Window(width=1),  # Right margin
-        ])
+        search_with_margin = VSplit(
+            [
+                Window(width=1),  # Left margin
+                self.search_area,
+                Window(width=1),  # Right margin
+            ]
+        )
 
         # Use two frames with different styles, showing one based on focus
         search_frame_focused = Frame(
             search_with_margin, title='Search Lexemes', height=Dimension.exact(3), style='class:frame-focused'
         )
-        search_frame_unfocused = Frame(
-            search_with_margin, title='Search Lexemes', height=Dimension.exact(3)
-        )
+        search_frame_unfocused = Frame(search_with_margin, title='Search Lexemes', height=Dimension.exact(3))
         results_frame_focused = Frame(results_pane, title='Results', style='class:frame-focused')
         results_frame_unfocused = Frame(results_pane, title='Results')
 
         main_content = HSplit(
             [
                 ConditionalContainer(
-                    HSplit([
-                        ConditionalContainer(search_frame_focused, filter=search_focused),
-                        ConditionalContainer(search_frame_unfocused, filter=~search_focused),
-                    ]),
+                    HSplit(
+                        [
+                            ConditionalContainer(search_frame_focused, filter=search_focused),
+                            ConditionalContainer(search_frame_unfocused, filter=~search_focused),
+                        ]
+                    ),
                     filter=not_editing,
                 ),
                 ConditionalContainer(
-                    HSplit([
-                        ConditionalContainer(results_frame_focused, filter=results_focused),
-                        ConditionalContainer(results_frame_unfocused, filter=~results_focused),
-                    ]),
+                    HSplit(
+                        [
+                            ConditionalContainer(results_frame_focused, filter=results_focused),
+                            ConditionalContainer(results_frame_unfocused, filter=~results_focused),
+                        ]
+                    ),
                     filter=not_editing,
                 ),
                 ConditionalContainer(
@@ -626,16 +651,18 @@ class CardEditor:
             return 'Delete this card?\n\n\n(y) Yes        (n) No'
 
         delete_dialog = Frame(
-            body=HSplit([
-                Window(height=1),  # Top margin
-                Window(
-                    FormattedTextControl(text=get_dialog_text),
-                    height=4,
-                    width=Dimension(min=40),
-                    align=WindowAlign.CENTER,
-                ),
-                Window(height=1),  # Bottom margin
-            ]),
+            body=HSplit(
+                [
+                    Window(height=1),  # Top margin
+                    Window(
+                        FormattedTextControl(text=get_dialog_text),
+                        height=4,
+                        width=Dimension(min=40),
+                        align=WindowAlign.CENTER,
+                    ),
+                    Window(height=1),  # Bottom margin
+                ]
+            ),
             title='Confirm Delete',
             style='class:frame-focused',
         )
@@ -644,16 +671,18 @@ class CardEditor:
 
         # Save confirmation dialog
         save_dialog = Frame(
-            body=HSplit([
-                Window(height=1),  # Top margin
-                Window(
-                    FormattedTextControl(text='Save changes?\n\n\n(y) Save        (n) Discard'),
-                    height=4,
-                    width=Dimension(min=40),
-                    align=WindowAlign.CENTER,
-                ),
-                Window(height=1),  # Bottom margin
-            ]),
+            body=HSplit(
+                [
+                    Window(height=1),  # Top margin
+                    Window(
+                        FormattedTextControl(text='Save changes?\n\n\n(y) Save        (n) Discard'),
+                        height=4,
+                        width=Dimension(min=40),
+                        align=WindowAlign.CENTER,
+                    ),
+                    Window(height=1),  # Bottom margin
+                ]
+            ),
             title='Save Changes',
             style='class:frame-focused',
         )
@@ -677,7 +706,7 @@ class CardEditor:
     def run(self) -> None:
         # Load initial list
         self._on_search()
-        
+
         self.app = Application(
             layout=self.create_layout(),
             key_bindings=self._create_key_bindings(),
