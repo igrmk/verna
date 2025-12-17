@@ -1,0 +1,10 @@
+?*.ignore
+?*.ignore.?*
+/.venv
+__pycache__
+/build
+/verna.egg-info
+/.do/app.yaml
+/.idea
+/.mypy_cache
+/.ruff_cache
