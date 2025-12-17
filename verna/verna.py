@@ -213,7 +213,6 @@ TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
     textwrap.dedent("""
         You are a translator.
         Informal language and swear words are allowed when necessary.
-        Do not explain your actions. Output ONLY JSON matching the schema.
         Between UK and US variants, choose UK.
 
         Translate the user input into {{ target_language }} and fill these fields:
@@ -263,7 +262,6 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
     textwrap.dedent("""
         You are a translator and dictionary.
         Informal language and swear words are allowed when necessary.
-        Do not explain your actions. Output ONLY JSON matching the schema.
         Between UK and US variants, choose UK.
 
         You will be given an English lexeme (L).
@@ -291,7 +289,6 @@ EXAMPLE_INSTRUCTIONS = JINJA_ENV.from_string(
         You are a translator and dictionary.
         Swear words are allowed when necessary.
         Informal language is allowed as well.
-        Do not explain your actions. Output ONLY JSON matching the schema.
         Between UK and US variants, choose UK.
 
         Generate an example sentence using the provided lexeme and return it in the `example` field.
