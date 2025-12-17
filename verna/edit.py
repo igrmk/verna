@@ -3,7 +3,7 @@ import psycopg
 from prompt_toolkit import Application
 from prompt_toolkit.filters import Condition, has_focus
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout import Layout, HSplit, VSplit, Window, FormattedTextControl, ScrollablePane
+from prompt_toolkit.layout import Layout, HSplit, VSplit, Window, FormattedTextControl, ScrollablePane, ConditionalContainer
 from prompt_toolkit.layout.containers import Container
 from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.widgets import Frame, TextArea
@@ -43,8 +43,13 @@ class CardEditor:
         self.field_rp = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
         self.field_past_simple = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
         self.field_past_participle = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
-        self.field_translations = TextArea(height=4, multiline=True, wrap_lines=True, read_only=field_readonly)
-        self.field_example = TextArea(height=4, multiline=True, wrap_lines=True, read_only=field_readonly)
+        # Translations and example expand to fill available space
+        self.field_translations = TextArea(
+            height=Dimension(min=3, weight=1), multiline=True, wrap_lines=True, read_only=field_readonly
+        )
+        self.field_example = TextArea(
+            height=Dimension(min=3, weight=1), multiline=True, wrap_lines=True, read_only=field_readonly
+        )
 
         self.form_fields = [
             ('Lexeme', self.field_lexeme),
@@ -68,6 +73,9 @@ class CardEditor:
                 'field-editing': 'bg:#252525',
             }
         )
+
+    def _is_editing(self) -> bool:
+        return self.editing_idx is not None
 
     def _in_form_nav(self) -> bool:
         if self.app is None:
@@ -108,14 +116,12 @@ class CardEditor:
         def _up(event):
             if self.selected_idx > 0:
                 self.selected_idx -= 1
-                self._update_preview()
 
         @kb.add('down', filter=in_results)
         @kb.add('j', filter=in_results)
         def _down(event):
             if self.selected_idx < len(self.cards) - 1:
                 self.selected_idx += 1
-                self._update_preview()
 
         @kb.add('enter', filter=in_results)
         def _start_edit(event):
@@ -223,7 +229,6 @@ class CardEditor:
     def _cancel_editing(self) -> None:
         self.editing_idx = None
         self.message = 'Edit cancelled'
-        self._update_preview()
 
     def _save_edit(self) -> None:
         if self.editing_idx is None:
@@ -263,7 +268,6 @@ class CardEditor:
             self.message = f'Error saving: {e}'
 
         self.editing_idx = None
-        self._update_preview()
 
     def _delete_card(self) -> None:
         if not self.cards:
@@ -278,20 +282,12 @@ class CardEditor:
             del self.cards[self.selected_idx]
             if self.selected_idx >= len(self.cards) and self.cards:
                 self.selected_idx = len(self.cards) - 1
-            self._update_preview()
         except psycopg.Error as e:
             self.message = f'Error deleting: {e}'
 
     def _clear_form(self) -> None:
         for _, field in self.form_fields:
             field.text = ''
-
-    def _update_preview(self) -> None:
-        if self.cards and self.selected_idx < len(self.cards):
-            _, card = self.cards[self.selected_idx]
-            self._load_card_to_form(card)
-        else:
-            self._clear_form()
 
     def _on_search(self) -> None:
         query = self.search_area.text.strip()
@@ -332,7 +328,6 @@ class CardEditor:
             ]
             self.selected_idx = 0
             self.message = f'Found {len(self.cards)} card(s)'
-            self._update_preview()
         except psycopg.Error as e:
             self.message = f'Search error: {e}'
             self.cards = []
@@ -419,27 +414,36 @@ class CardEditor:
 
         results_pane = ScrollablePane(self.results_window)
 
-        edit_label_control = FormattedTextControl(
-            text=lambda: ' EDITING' if self.editing_idx is not None else ' PREVIEW'
-        )
-
         form_rows: list[Container] = [
             self.form_nav_window,  # Invisible focusable window for form navigation (no cursor)
-            Window(edit_label_control, height=1, style='class:label'),
-            Window(height=1, char='─', style='class:dim'),
         ]
         for idx, (label, field) in enumerate(self.form_fields):
             form_rows.append(self._create_form_row(idx, label, field))
             if idx == 3:  # After past_participle
                 form_rows.append(Window(height=1))
+            if idx == 4:  # After translations (before example)
+                form_rows.append(Window(height=1))
 
         form = HSplit(form_rows)
 
+        not_editing = Condition(lambda: not self._is_editing())
+
+        is_editing = Condition(self._is_editing)
+
         body = HSplit(
             [
-                Frame(self.search_area, title='Search Lexemes', height=Dimension.exact(3)),
-                Frame(results_pane, title='Results'),
-                Frame(form, title='Editor'),
+                ConditionalContainer(
+                    Frame(self.search_area, title='Search Lexemes', height=Dimension.exact(3)),
+                    filter=not_editing,
+                ),
+                ConditionalContainer(
+                    Frame(results_pane, title='Results'),
+                    filter=not_editing,
+                ),
+                ConditionalContainer(
+                    Frame(form, title='Editor'),
+                    filter=is_editing,
+                ),
                 Window(content=self.message_control, height=1),
                 Window(content=help_control, height=1, style='class:dim'),
             ]
