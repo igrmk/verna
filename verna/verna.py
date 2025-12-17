@@ -141,12 +141,11 @@ def _responses_parse(
 
 
 def detect_language(cfg: argparse.Namespace, client: OpenAI, query: str) -> LanguageDetectionResponse:
-    instructions = LANGUAGE_DETECTION_INSTRUCTIONS
     return _responses_parse(
         cfg,
         client,
         step='LANGUAGE DETECTION',
-        instructions=instructions,
+        instructions=LANGUAGE_DETECTION_INSTRUCTIONS,
         user_input=query,
         text_format=LanguageDetectionResponse,
         model=cfg.model_detect or cfg.model,
@@ -160,11 +159,9 @@ def translate_text(
     query: str,
     source_language: Language,
 ) -> TranslationResponse:
-    word_count = len(query.split())
-    target_language = 'Russian' if source_language == Language.ENGLISH else 'English'
     instructions = TRANSLATION_INSTRUCTIONS.render(
-        target_language=target_language,
-        word_count=word_count,
+        target_language='Russian' if source_language == Language.ENGLISH else 'English',
+        word_count=len(query.split()),
     )
     return _responses_parse(
         cfg,
@@ -178,12 +175,11 @@ def translate_text(
 
 
 def extract_lexemes(cfg: argparse.Namespace, client: OpenAI, *, query: str) -> LexemeExtractionResponse:
-    instructions = LEXEME_EXTRACTION_INSTRUCTIONS.render()
     return _responses_parse(
         cfg,
         client,
         step='LEXEME EXTRACTION',
-        instructions=instructions,
+        instructions=LEXEME_EXTRACTION_INSTRUCTIONS,
         user_input=query,
         text_format=LexemeExtractionResponse,
         model=cfg.model_extract or cfg.model,
@@ -198,13 +194,12 @@ def translate_lexeme(
     example: str | None = None,
 ) -> LexemeTranslationResponse:
     instructions = LEXEME_TRANSLATION_INSTRUCTIONS.render(example=example)
-    user_input = f'{lexeme_text}\nExample: {example}' if example else lexeme_text
     return _responses_parse(
         cfg,
         client,
         step='LEXEME TRANSLATION',
         instructions=instructions,
-        user_input=user_input,
+        user_input=f'{lexeme_text}\nExample: {example}' if example else lexeme_text,
         text_format=LexemeTranslationResponse,
         model=cfg.model_translate_lexeme or cfg.model,
     )
@@ -238,33 +233,31 @@ TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
     """).strip()
 )
 
-LEXEME_EXTRACTION_INSTRUCTIONS = JINJA_ENV.from_string(
-    textwrap.dedent("""
-        You are a dictionary and lexeme extractor.
-        Informal language and swear words are allowed when necessary.
-        Prefer UK spelling over US spelling
+LEXEME_EXTRACTION_INSTRUCTIONS = textwrap.dedent("""
+    You are a dictionary and lexeme extractor.
+    Informal language and swear words are allowed when necessary.
+    Prefer UK spelling over US spelling
 
-        Extract all English lexemes that appear in the user input.
-        Search for multi-word lexemes (e.g. phrasal verbs and phrasemes) in addition to single-word lexemes.
-        Exclude proper names.
-        Treat different forms (e.g., verb and noun) as one lexeme.
+    Extract all English lexemes that appear in the user input.
+    Search for multi-word lexemes (e.g. phrasal verbs and phrasemes) in addition to single-word lexemes.
+    Exclude proper names.
+    Treat different forms (e.g., verb and noun) as one lexeme.
 
-        Output `items`: a list of objects. For each extracted lexeme, create one item:
-          - `item.lexeme` — the lexeme in its base form;
-             use the plural if it is the standard form for the meaning in the sentence
-             (e.g., scissors, or spoils as in "the spoils of victory")
-          - `item.example` — the full sentence from the user input where the lexeme occurs,
-             do not include it if it is not a sentence
-          - `item.cefr` — estimate the lexeme's CEFR level.
+    Output `items`: a list of objects. For each extracted lexeme, create one item:
+      - `item.lexeme` — the lexeme in its base form;
+         use the plural if it is the standard form for the meaning in the sentence
+         (e.g., scissors, or spoils as in "the spoils of victory")
+      - `item.example` — the full sentence from the user input where the lexeme occurs,
+         do not include it if it is not a sentence
+      - `item.cefr` — estimate the lexeme's CEFR level.
 
-        Before extracting the example sentence, correct its grammar and spelling first;
-        ensure proper sentence capitalisation and punctuation;
-        don't correct contractions;
-        don't correct local variants;
-        keep the lexeme unchanged where possible.
-        If unavailable, set `item.example` to null.
-    """).strip()
-)
+    Before extracting the example sentence, correct its grammar and spelling first;
+    ensure proper sentence capitalisation and punctuation;
+    don't correct contractions;
+    don't correct local variants;
+    keep the lexeme unchanged where possible.
+    If unavailable, set `item.example` to null.
+""").strip()
 
 LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
     textwrap.dedent("""
