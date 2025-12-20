@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./**/*.ignore)",
+      "Read(./**/*.ignore.*)",
+      "Read(./.venv/**)",
+      "Read(./**/__pycache__/**)",
+      "Read(./build/**)",
+      "Read(./verna.egg-info/**)",
+      "Read(./.do/app.yaml)",
+      "Read(./.idea/**)"
+    ]
+  }
+}
