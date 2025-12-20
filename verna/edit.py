@@ -2,7 +2,7 @@ import sys
 import psycopg
 from prompt_toolkit import Application
 from prompt_toolkit.filters import Condition, has_focus
-from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.key_binding import KeyBindings, KeyBindingsBase, merge_key_bindings
 from prompt_toolkit.data_structures import Point
 from prompt_toolkit.layout import (
     Layout,
@@ -24,18 +24,19 @@ from prompt_toolkit.styles import Style
 from verna.config import get_parser, Sections, print_config
 from verna.db_types import Card
 
+from typing import Callable
 
-class CardEditor:
-    def __init__(self, conn_string: str):
-        self.conn_string = conn_string
-        self.cards: list[tuple[int, Card]] = []
-        self.selected_idx = 0
-        self.editing_idx: int | None = None
-        self.form_field_idx = 0
-        self.show_delete_dialog = False
-        self.show_save_dialog = False
-        self.original_card: Card | None = None  # Store original card for change detection
-        self.message = ''
+
+class SearchPanel:
+    def __init__(
+        self,
+        on_search: Callable[[str], None],
+        on_focus_results: Callable[[], None],
+        on_exit: Callable[[], None],
+    ):
+        self.on_search = on_search
+        self.on_focus_results = on_focus_results
+        self.on_exit = on_exit
         self.app: Application | None = None
 
         self.search_area = TextArea(
@@ -44,8 +45,74 @@ class CardEditor:
             multiline=False,
             wrap_lines=False,
         )
-        # Live search as user types
-        self.search_area.buffer.on_text_changed += lambda _: self._on_search()
+        self.search_area.buffer.on_text_changed += lambda _: self.on_search(self.search_area.text.strip())
+
+    def set_app(self, app: Application) -> None:
+        self.app = app
+
+    def is_focused(self) -> bool:
+        if self.app is None:
+            return False
+        return self.app.layout.has_focus(self.search_area)
+
+    def focus(self) -> None:
+        if self.app:
+            self.app.layout.focus(self.search_area)
+
+    def get_key_bindings(self) -> KeyBindings:
+        kb = KeyBindings()
+        in_search = has_focus(self.search_area)
+
+        @kb.add('escape', filter=in_search)
+        def _exit_from_search(event):
+            self.on_exit()
+
+        @kb.add('enter', filter=in_search)
+        def _focus_results(event):
+            self.on_focus_results()
+
+        return kb
+
+    def create_layout(self) -> Container:
+        is_focused = Condition(self.is_focused)
+
+        search_with_margin = VSplit(
+            [
+                Window(width=1),
+                self.search_area,
+                Window(width=1),
+            ]
+        )
+
+        return HSplit(
+            [
+                ConditionalContainer(
+                    Frame(search_with_margin, title='Search Lexemes', height=Dimension.exact(3), style='class:frame-focused'),
+                    filter=is_focused,
+                ),
+                ConditionalContainer(
+                    Frame(search_with_margin, title='Search Lexemes', height=Dimension.exact(3)),
+                    filter=~is_focused,
+                ),
+            ]
+        )
+
+
+class ResultsPanel:
+    def __init__(
+        self,
+        on_edit: Callable[[int, Card], None],
+        on_delete: Callable[[int, Card], None],
+        on_focus_search: Callable[[], None],
+    ):
+        self.on_edit = on_edit
+        self.on_delete = on_delete
+        self.on_focus_search = on_focus_search
+        self.app: Application | None = None
+
+        self.cards: list[tuple[int, Card]] = []
+        self.selected_idx = 0
+        self.show_delete_dialog = False
 
         self.results_control = FormattedTextControl(
             text=self._get_results_text,
@@ -55,399 +122,42 @@ class CardEditor:
         )
         self.results_window = Window(content=self.results_control, wrap_lines=True)
 
-        # Invisible control for form navigation (doesn't show cursor)
-        self.form_nav_control = FormattedTextControl(text='', focusable=True, show_cursor=False)
-        self.form_nav_window = Window(content=self.form_nav_control, height=0)
+    def set_app(self, app: Application) -> None:
+        self.app = app
 
-        # Create form fields with read_only filter (editable only when the field itself is focused)
-        field_readonly = Condition(lambda: not self._in_any_form_field())
-        self.field_lexeme = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
-        self.field_rp = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
-        self.field_past_simple = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
-        self.field_past_participle = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
-        # Translations and example grow with content
-        self.field_translations = TextArea(
-            height=Dimension(min=1),
-            multiline=True,
-            wrap_lines=True,
-            read_only=field_readonly,
-            dont_extend_height=True,
-        )
-        self.field_example = TextArea(
-            height=Dimension(min=1),
-            multiline=True,
-            wrap_lines=True,
-            read_only=field_readonly,
-            dont_extend_height=True,
-        )
-
-        self.form_fields = [
-            ('Lexeme', self.field_lexeme),
-            ('RP', self.field_rp),
-            ('Past simple', self.field_past_simple),
-            ('Past participle', self.field_past_participle),
-            ('Translations', self.field_translations),
-            ('Example', self.field_example),
-        ]
-
-        self.message_control = FormattedTextControl(text=lambda: self.message)
-
-        self.style = Style.from_dict(
-            {
-                'frame.border': 'fg:ansibrightblack',
-                'frame.label': 'fg:ansiwhite',
-                'frame-focused frame.border': 'fg:ansiblue',
-                'frame-focused frame.label': 'fg:ansiblue bold reverse',
-                'selected': 'reverse',
-                'selected-unfocused': 'fg:ansiblack bg:ansibrightblack',
-                'lexeme': 'bold fg:ansigreen',
-                'lexeme-dim': 'fg:ansigreen',  # Same green, no bold
-                'dim': 'fg:ansibrightblack',
-                'label': 'fg:ansicyan',
-                'label-selected': 'fg:ansicyan bold reverse',
-                'field-editing': 'bg:#252525',
-                'dialog frame.border': 'fg:ansiblue',
-            }
-        )
-
-    def _is_editing(self) -> bool:
-        return self.editing_idx is not None
-
-    def _search_focused(self) -> bool:
-        if self.app is None:
-            return False
-        return self.app.layout.has_focus(self.search_area)
-
-    def _results_focused(self) -> bool:
+    def is_focused(self) -> bool:
         if self.app is None:
             return False
         return self.app.layout.has_focus(self.results_window)
 
-    def _in_form_nav(self) -> bool:
-        if self.app is None:
-            return False
-        return self.app.layout.current_control == self.form_nav_control
-
-    def _in_any_form_field(self) -> bool:
-        if self.app is None:
-            return False
-        focused = self.app.layout.current_control
-        for _, field in self.form_fields:
-            if field.control == focused:
-                return True
-        return False
-
-    def _create_key_bindings(self) -> KeyBindings:
-        kb = KeyBindings()
-
-        in_form_nav = Condition(self._in_form_nav)
-        in_form_editing = Condition(self._in_any_form_field)
-        in_results = has_focus(self.results_window)
-        in_search = has_focus(self.search_area)
-
-        @kb.add('c-c')
-        def _exit(event):
-            event.app.exit()
-
-        # Search
-        @kb.add('escape', filter=in_search)
-        def _exit_from_search(event):
-            event.app.exit()
-
-        @kb.add('enter', filter=in_search)
-        def _focus_results(event):
-            event.app.layout.focus(self.results_window)
-
-        in_delete_dialog = Condition(lambda: self.show_delete_dialog)
-
-        # Results navigation
-        @kb.add('up', filter=in_results & ~in_delete_dialog)
-        @kb.add('k', filter=in_results & ~in_delete_dialog)
-        def _up(event):
-            if self.selected_idx > 0:
-                self.selected_idx -= 1
-
-        @kb.add('down', filter=in_results & ~in_delete_dialog)
-        @kb.add('j', filter=in_results & ~in_delete_dialog)
-        def _down(event):
-            if self.selected_idx < len(self.cards) - 1:
-                self.selected_idx += 1
-
-        @kb.add('enter', filter=in_results & ~in_delete_dialog)
-        def _start_edit(event):
-            if self.cards:
-                self._start_editing()
-
-        @kb.add('escape', filter=in_results & ~in_delete_dialog)
-        def _focus_search_from_results(event):
-            event.app.layout.focus(self.search_area)
-
-        @kb.add('d', filter=in_results & ~in_delete_dialog)
-        def _show_delete_dialog(event):
-            if self.cards:
-                self.show_delete_dialog = True
-
-        @kb.add('y', filter=in_results & in_delete_dialog)
-        def _confirm_delete(event):
-            self._delete_card()
-            self.show_delete_dialog = False
-
-        @kb.add('n', filter=in_results & in_delete_dialog)
-        @kb.add('escape', filter=in_results & in_delete_dialog)
-        def _cancel_delete(event):
-            self.show_delete_dialog = False
-            self.message = 'Delete cancelled'
-
-        @kb.add('/', filter=in_results & ~in_delete_dialog)
-        def _focus_search(event):
-            event.app.layout.focus(self.search_area)
-
-        # Form navigation mode (using invisible nav control - no cursor shown)
-        @kb.add('up', filter=in_form_nav)
-        @kb.add('k', filter=in_form_nav)
-        def _form_up(event):
-            self._form_navigate(-1)
-
-        @kb.add('down', filter=in_form_nav)
-        @kb.add('j', filter=in_form_nav)
-        @kb.add('tab', filter=in_form_nav)
-        def _form_down(event):
-            self._form_navigate(1)
-
-        @kb.add('s-tab', filter=in_form_nav)
-        def _form_prev(event):
-            self._form_navigate(-1)
-
-        @kb.add('i', filter=in_form_nav)
-        @kb.add('enter', filter=in_form_nav)
-        def _form_enter_edit(event):
-            # Store original value before editing
-            _, field = self.form_fields[self.form_field_idx]
-            self.field_original_value = field.text
-            # Focus the actual TextArea to show cursor and enable editing
-            event.app.layout.focus(field)
-            self.message = 'Editing field (Esc to cancel, Enter to save)'
-
-        in_save_dialog = Condition(lambda: self.show_save_dialog)
-
-        @kb.add('escape', filter=in_form_nav & ~in_save_dialog)
-        def _exit_or_show_save_dialog(event):
-            if self._has_changes():
-                self.show_save_dialog = True
-            else:
-                self._cancel_editing()
-                event.app.layout.focus(self.results_window)
-
-        @kb.add('y', filter=in_form_nav & in_save_dialog)
-        @kb.add('enter', filter=in_form_nav & in_save_dialog)
-        def _confirm_save(event):
-            self._save_edit()
-            self.show_save_dialog = False
-            event.app.layout.focus(self.results_window)
-
-        @kb.add('n', filter=in_form_nav & in_save_dialog)
-        @kb.add('escape', filter=in_form_nav & in_save_dialog)
-        def _cancel_save(event):
-            self._cancel_editing()
-            self.show_save_dialog = False
-            event.app.layout.focus(self.results_window)
-
-        # Form editing mode (actual TextArea focused - cursor shown)
-        @kb.add('escape', filter=in_form_editing)
-        def _form_exit_edit(event):
-            # Remove empty lines from multiline fields
-            _, field = self.form_fields[self.form_field_idx]
-            if self.form_field_idx >= 4:  # Multiline fields (translations, example)
-                lines = [line for line in field.text.split('\n') if line.strip()]
-                field.text = '\n'.join(lines)
-            event.app.layout.focus(self.form_nav_window)
-            self.message = 'Navigate fields (j/k), edit (i/Enter), exit (Esc)'
-
-        # Enter saves for single-line fields (multiline fields use Enter for newlines)
-        in_single_line_field = Condition(lambda: self.form_field_idx < 4)  # First 4 fields are single-line
-
-        @kb.add('enter', filter=in_form_editing & in_single_line_field)
-        def _form_save_from_field(event):
-            self._save_edit()
-            event.app.layout.focus(self.results_window)
-
-        @kb.add('tab', filter=in_form_editing)
-        def _form_next_while_editing(event):
-            self._form_navigate(1)
-
-        @kb.add('s-tab', filter=in_form_editing)
-        def _form_prev_while_editing(event):
-            self._form_navigate(-1)
-
-        return kb
-
-    def _form_navigate(self, direction: int) -> None:
-        self.form_field_idx = (self.form_field_idx + direction) % len(self.form_fields)
+    def focus(self) -> None:
         if self.app:
-            # Focus the invisible nav control (no cursor) rather than the actual TextArea
-            self.app.layout.focus(self.form_nav_window)
+            self.app.layout.focus(self.results_window)
 
-    def _load_card_to_form(self, card: Card) -> None:
-        self.form_fields[0][1].text = card.lexeme
-        self.form_fields[1][1].text = ', '.join(card.rp)
-        self.form_fields[2][1].text = card.past_simple or ''
-        self.form_fields[3][1].text = card.past_participle or ''
-        self.form_fields[4][1].text = '\n'.join(card.translations)
-        self.form_fields[5][1].text = '\n'.join(card.example)
+    def set_cards(self, cards: list[tuple[int, Card]]) -> None:
+        self.cards = cards
+        self.selected_idx = 0
 
-    def _form_to_card(self) -> Card:
-        rp_text = self.form_fields[1][1].text.strip()
-        return Card(
-            lexeme=self.form_fields[0][1].text.strip(),
-            rp=[x.strip() for x in rp_text.split(',') if x.strip()] if rp_text else [],
-            past_simple=self.form_fields[2][1].text.strip() or None,
-            past_participle=self.form_fields[3][1].text.strip() or None,
-            translations=[x.strip() for x in self.form_fields[4][1].text.split('\n') if x.strip()],
-            example=[x.strip() for x in self.form_fields[5][1].text.split('\n') if x.strip()],
-        )
+    def update_card(self, card_id: int, card: Card) -> None:
+        for i, (cid, _) in enumerate(self.cards):
+            if cid == card_id:
+                self.cards[i] = (card_id, card)
+                break
 
-    def _start_editing(self) -> None:
-        self.editing_idx = self.selected_idx
-        self.form_field_idx = 0
-        _, card = self.cards[self.editing_idx]
-        self.original_card = card  # Store for change detection
-        self._load_card_to_form(card)
-        self.message = 'Navigate fields (j/k), edit (i/Enter), exit (Esc)'
-        if self.app:
-            # Focus the invisible nav control (no cursor shown during navigation)
-            self.app.layout.focus(self.form_nav_window)
+    def remove_card(self, card_id: int) -> None:
+        for i, (cid, _) in enumerate(self.cards):
+            if cid == card_id:
+                del self.cards[i]
+                if self.selected_idx >= len(self.cards) and self.cards:
+                    self.selected_idx = len(self.cards) - 1
+                break
 
-    def _has_changes(self) -> bool:
-        """Check if the form has changes compared to the original card."""
-        if self.original_card is None:
-            return False
-        current = self._form_to_card()
-        orig = self.original_card
-        return (
-            current.lexeme != orig.lexeme
-            or current.rp != orig.rp
-            or current.past_simple != orig.past_simple
-            or current.past_participle != orig.past_participle
-            or current.translations != orig.translations
-            or current.example != orig.example
-        )
-
-    def _cancel_editing(self) -> None:
-        self.editing_idx = None
-        self.message = 'Edit cancelled'
-
-    def _save_edit(self) -> None:
-        if self.editing_idx is None:
-            return
-
-        card_id, _ = self.cards[self.editing_idx]
-        card = self._form_to_card()
-
-        try:
-            with psycopg.connect(self.conn_string) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        update cards set
-                            lexeme = %s,
-                            rp = %s,
-                            past_simple = %s,
-                            past_participle = %s,
-                            translations = %s,
-                            example = %s
-                        where id = %s
-                        """,
-                        (
-                            card.lexeme,
-                            card.rp,
-                            card.past_simple,
-                            card.past_participle,
-                            card.translations,
-                            card.example,
-                            card_id,
-                        ),
-                    )
-                conn.commit()
-            self.cards[self.editing_idx] = (card_id, card)
-            self.message = f'Saved: {card.lexeme}'
-        except psycopg.Error as e:
-            self.message = f'Error saving: {e}'
-
-        self.editing_idx = None
-
-    def _delete_card(self) -> None:
-        if not self.cards:
-            return
-        card_id, card = self.cards[self.selected_idx]
-        try:
-            with psycopg.connect(self.conn_string) as conn:
-                with conn.cursor() as cur:
-                    cur.execute('delete from cards where id = %s', (card_id,))
-                conn.commit()
-            self.message = f'Deleted: {card.lexeme}'
-            del self.cards[self.selected_idx]
-            if self.selected_idx >= len(self.cards) and self.cards:
-                self.selected_idx = len(self.cards) - 1
-        except psycopg.Error as e:
-            self.message = f'Error deleting: {e}'
-
-    def _clear_form(self) -> None:
-        for _, field in self.form_fields:
-            field.text = ''
-
-    def _on_search(self) -> None:
-        query = self.search_area.text.strip()
-
-        try:
-            with psycopg.connect(self.conn_string) as conn:
-                with conn.cursor() as cur:
-                    if query:
-                        cur.execute(
-                            """
-                            select id, lexeme, rp, past_simple, past_participle, translations, example
-                            from cards
-                            where lexeme ilike %s
-                            order by lexeme
-                            limit 50
-                            """,
-                            (f'%{query}%',),
-                        )
-                    else:
-                        cur.execute(
-                            """
-                            select id, lexeme, rp, past_simple, past_participle, translations, example
-                            from cards
-                            order by lexeme
-                            limit 50
-                            """
-                        )
-                    rows = cur.fetchall()
-
-            self.cards = [
-                (
-                    row[0],
-                    Card(
-                        lexeme=row[1],
-                        rp=row[2] or [],
-                        past_simple=row[3],
-                        past_participle=row[4],
-                        translations=row[5] or [],
-                        example=row[6] or [],
-                    ),
-                )
-                for row in rows
-            ]
-            self.selected_idx = 0
-            if len(self.cards) == 50:
-                self.message = 'Showing first 50 cards (refine search for more)'
-            else:
-                self.message = f'Found {len(self.cards)} card(s)'
-        except psycopg.Error as e:
-            self.message = f'Search error: {e}'
-            self.cards = []
+    def get_selected_card(self) -> tuple[int, Card] | None:
+        if self.cards and self.selected_idx < len(self.cards):
+            return self.cards[self.selected_idx]
+        return None
 
     def _count_card_lines(self, card: Card) -> int:
-        """Count the number of lines a card takes in the results view."""
         lines = 1  # lexeme line
         if card.past_simple:
             lines += 1  # past tense line
@@ -457,7 +167,6 @@ class CardEditor:
         return lines
 
     def _get_selected_line(self) -> int:
-        """Get the line number where the selected card starts."""
         if not self.cards:
             return 0
         line = 0
@@ -471,23 +180,19 @@ class CardEditor:
         if not self.cards:
             return [('class:dim', 'No results.')]
 
-        results_focused = self._results_focused()
+        results_focused = self.is_focused()
         lines = []
         for idx, (card_id, card) in enumerate(self.cards):
             is_selected = idx == self.selected_idx
 
             prefix = ' ▶ ' if is_selected else '   '
             if is_selected and not results_focused:
-                # Unfocused selection: black text on grey background
                 style = 'class:selected-unfocused'
             elif is_selected:
-                # Focused selection: reversed with green text
                 style = 'class:selected class:lexeme'
             elif not results_focused:
-                # Not selected, unfocused: dark green text
                 style = 'class:lexeme-dim'
             else:
-                # Not selected, focused: green text
                 style = 'class:lexeme'
 
             lexeme_line = f'{prefix}{card.lexeme}'
@@ -513,29 +218,330 @@ class CardEditor:
 
         return lines
 
-    def _get_help_text(self) -> str:
-        if self._in_any_form_field():
-            return 'Esc: exit field | Enter: save (single-line) | Tab/S-Tab: next/prev'
-        if self.show_save_dialog:
-            return '(y) Save | (n) Discard | Esc: back'
-        if self._in_form_nav():
-            return '↑/↓ or j/k: select field | i/Enter: edit | Esc: exit'
-        if self._results_focused():
-            return '↑/↓ or j/k: navigate | Enter: edit | d: delete | /: search | Esc: back'
-        return 'Type to search | Enter: search | Esc: quit'
+    def get_key_bindings(self) -> KeyBindings:
+        kb = KeyBindings()
+        in_results = has_focus(self.results_window)
+        in_delete_dialog = Condition(lambda: self.show_delete_dialog)
+
+        @kb.add('up', filter=in_results & ~in_delete_dialog)
+        @kb.add('k', filter=in_results & ~in_delete_dialog)
+        def _up(event):
+            if self.selected_idx > 0:
+                self.selected_idx -= 1
+
+        @kb.add('down', filter=in_results & ~in_delete_dialog)
+        @kb.add('j', filter=in_results & ~in_delete_dialog)
+        def _down(event):
+            if self.selected_idx < len(self.cards) - 1:
+                self.selected_idx += 1
+
+        @kb.add('enter', filter=in_results & ~in_delete_dialog)
+        def _start_edit(event):
+            selected = self.get_selected_card()
+            if selected:
+                card_id, card = selected
+                self.on_edit(card_id, card)
+
+        @kb.add('escape', filter=in_results & ~in_delete_dialog)
+        def _focus_search_from_results(event):
+            self.on_focus_search()
+
+        @kb.add('d', filter=in_results & ~in_delete_dialog)
+        def _show_delete_dialog(event):
+            if self.cards:
+                self.show_delete_dialog = True
+
+        @kb.add('y', filter=in_results & in_delete_dialog)
+        def _confirm_delete(event):
+            selected = self.get_selected_card()
+            if selected:
+                card_id, card = selected
+                self.on_delete(card_id, card)
+            self.show_delete_dialog = False
+
+        @kb.add('n', filter=in_results & in_delete_dialog)
+        @kb.add('escape', filter=in_results & in_delete_dialog)
+        def _cancel_delete(event):
+            self.show_delete_dialog = False
+
+        @kb.add('/', filter=in_results & ~in_delete_dialog)
+        def _focus_search(event):
+            self.on_focus_search()
+
+        return kb
+
+    def create_layout(self) -> Container:
+        is_focused = Condition(self.is_focused)
+
+        results_pane = VSplit(
+            [
+                Window(width=1),
+                ScrollablePane(self.results_window),
+                Window(width=1),
+            ]
+        )
+
+        return HSplit(
+            [
+                ConditionalContainer(
+                    Frame(results_pane, title='Results', style='class:frame-focused'),
+                    filter=is_focused,
+                ),
+                ConditionalContainer(
+                    Frame(results_pane, title='Results'),
+                    filter=~is_focused,
+                ),
+            ]
+        )
+
+    def create_delete_dialog(self) -> Float:
+        def get_dialog_text():
+            selected = self.get_selected_card()
+            if selected:
+                _, card = selected
+                return f'Delete "{card.lexeme}"?\n\n\n(y) Yes        (n) No'
+            return 'Delete this card?\n\n\n(y) Yes        (n) No'
+
+        delete_dialog = Frame(
+            body=HSplit(
+                [
+                    Window(height=1),
+                    Window(
+                        FormattedTextControl(text=get_dialog_text),
+                        height=4,
+                        width=Dimension(min=40),
+                        align=WindowAlign.CENTER,
+                    ),
+                    Window(height=1),
+                ]
+            ),
+            title='Confirm Delete',
+            style='class:frame-focused',
+        )
+
+        show_delete = Condition(lambda: self.show_delete_dialog)
+
+        return Float(content=ConditionalContainer(delete_dialog, filter=show_delete))
+
+
+class EditorPanel:
+    SINGLE_LINE_FIELD_COUNT = 4  # lexeme, rp, past_simple, past_participle
+
+    def __init__(
+        self,
+        on_save: Callable[[int, Card], None],
+        on_cancel: Callable[[], None],
+    ):
+        self.on_save = on_save
+        self.on_cancel = on_cancel
+        self.app: Application | None = None
+
+        self.editing_card_id: int | None = None
+        self.form_field_idx = 0
+        self.show_save_dialog = False
+        self.original_card: Card | None = None
+
+        # Invisible control for form navigation (doesn't show cursor)
+        self.form_nav_control = FormattedTextControl(text='', focusable=True, show_cursor=False)
+        self.form_nav_window = Window(content=self.form_nav_control, height=0)
+
+        # Create form fields with read_only filter
+        field_readonly = Condition(lambda: not self._in_any_form_field())
+        self.field_lexeme = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
+        self.field_rp = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
+        self.field_past_simple = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
+        self.field_past_participle = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
+        self.field_translations = TextArea(
+            height=Dimension(min=1),
+            multiline=True,
+            wrap_lines=True,
+            read_only=field_readonly,
+            dont_extend_height=True,
+        )
+        self.field_example = TextArea(
+            height=Dimension(min=1),
+            multiline=True,
+            wrap_lines=True,
+            read_only=field_readonly,
+            dont_extend_height=True,
+        )
+
+        self.form_fields = [
+            ('Lexeme', self.field_lexeme),
+            ('RP', self.field_rp),
+            ('Past simple', self.field_past_simple),
+            ('Past participle', self.field_past_participle),
+            ('Translations', self.field_translations),
+            ('Example', self.field_example),
+        ]
+
+    def set_app(self, app: Application) -> None:
+        self.app = app
+
+    def is_editing(self) -> bool:
+        return self.editing_card_id is not None
+
+    def _in_form_nav(self) -> bool:
+        if self.app is None:
+            return False
+        return self.app.layout.current_control == self.form_nav_control
+
+    def _in_any_form_field(self) -> bool:
+        if self.app is None:
+            return False
+        focused = self.app.layout.current_control
+        for _, field in self.form_fields:
+            if field.control == focused:
+                return True
+        return False
+
+    def focus(self) -> None:
+        if self.app:
+            self.app.layout.focus(self.form_nav_window)
+
+    def start_editing(self, card_id: int, card: Card) -> None:
+        self.editing_card_id = card_id
+        self.form_field_idx = 0
+        self.original_card = card
+        self._load_card_to_form(card)
+        self.focus()
+
+    def _load_card_to_form(self, card: Card) -> None:
+        self.field_lexeme.text = card.lexeme
+        self.field_rp.text = ', '.join(card.rp)
+        self.field_past_simple.text = card.past_simple or ''
+        self.field_past_participle.text = card.past_participle or ''
+        self.field_translations.text = '\n'.join(card.translations)
+        self.field_example.text = '\n'.join(card.example)
+
+    def _form_to_card(self) -> Card:
+        rp_text = self.field_rp.text.strip()
+        return Card(
+            lexeme=self.field_lexeme.text.strip(),
+            rp=[x.strip() for x in rp_text.split(',') if x.strip()] if rp_text else [],
+            past_simple=self.field_past_simple.text.strip() or None,
+            past_participle=self.field_past_participle.text.strip() or None,
+            translations=[x.strip() for x in self.field_translations.text.split('\n') if x.strip()],
+            example=[x.strip() for x in self.field_example.text.split('\n') if x.strip()],
+        )
+
+    def _has_changes(self) -> bool:
+        if self.original_card is None:
+            return False
+        current = self._form_to_card()
+        orig = self.original_card
+        return (
+            current.lexeme != orig.lexeme
+            or current.rp != orig.rp
+            or current.past_simple != orig.past_simple
+            or current.past_participle != orig.past_participle
+            or current.translations != orig.translations
+            or current.example != orig.example
+        )
+
+    def _form_navigate(self, direction: int) -> None:
+        self.form_field_idx = (self.form_field_idx + direction) % len(self.form_fields)
+        if self.app:
+            self.app.layout.focus(self.form_nav_window)
+
+    def _save_and_exit(self) -> None:
+        if self.editing_card_id is None:
+            return
+        card = self._form_to_card()
+        card_id = self.editing_card_id
+        self.editing_card_id = None
+        self.original_card = None
+        self.on_save(card_id, card)
+
+    def _cancel_and_exit(self) -> None:
+        self.editing_card_id = None
+        self.original_card = None
+        self.on_cancel()
+
+    def get_key_bindings(self) -> KeyBindings:
+        kb = KeyBindings()
+
+        in_form_nav = Condition(self._in_form_nav)
+        in_form_editing = Condition(self._in_any_form_field)
+        in_save_dialog = Condition(lambda: self.show_save_dialog)
+        in_single_line_field = Condition(lambda: self.form_field_idx < self.SINGLE_LINE_FIELD_COUNT)
+
+        # Form navigation mode
+        @kb.add('up', filter=in_form_nav & ~in_save_dialog)
+        @kb.add('k', filter=in_form_nav & ~in_save_dialog)
+        def _form_up(event):
+            self._form_navigate(-1)
+
+        @kb.add('down', filter=in_form_nav & ~in_save_dialog)
+        @kb.add('j', filter=in_form_nav & ~in_save_dialog)
+        @kb.add('tab', filter=in_form_nav & ~in_save_dialog)
+        def _form_down(event):
+            self._form_navigate(1)
+
+        @kb.add('s-tab', filter=in_form_nav & ~in_save_dialog)
+        def _form_prev(event):
+            self._form_navigate(-1)
+
+        @kb.add('i', filter=in_form_nav & ~in_save_dialog)
+        @kb.add('enter', filter=in_form_nav & ~in_save_dialog)
+        def _form_enter_edit(event):
+            _, field = self.form_fields[self.form_field_idx]
+            event.app.layout.focus(field)
+
+        @kb.add('escape', filter=in_form_nav & ~in_save_dialog)
+        def _exit_or_show_save_dialog(event):
+            if self._has_changes():
+                self.show_save_dialog = True
+            else:
+                self._cancel_and_exit()
+
+        @kb.add('y', filter=in_form_nav & in_save_dialog)
+        @kb.add('enter', filter=in_form_nav & in_save_dialog)
+        def _confirm_save(event):
+            self._save_and_exit()
+            self.show_save_dialog = False
+
+        @kb.add('n', filter=in_form_nav & in_save_dialog)
+        @kb.add('escape', filter=in_form_nav & in_save_dialog)
+        def _cancel_save(event):
+            self._cancel_and_exit()
+            self.show_save_dialog = False
+
+        # Form editing mode (actual TextArea focused)
+        @kb.add('escape', filter=in_form_editing)
+        def _form_exit_edit(event):
+            # Remove empty lines from multiline fields
+            _, field = self.form_fields[self.form_field_idx]
+            if self.form_field_idx >= self.SINGLE_LINE_FIELD_COUNT:
+                lines = [line for line in field.text.split('\n') if line.strip()]
+                field.text = '\n'.join(lines)
+            event.app.layout.focus(self.form_nav_window)
+
+        @kb.add('enter', filter=in_form_editing & in_single_line_field)
+        def _form_save_from_field(event):
+            self._save_and_exit()
+
+        @kb.add('tab', filter=in_form_editing)
+        def _form_next_while_editing(event):
+            self._form_navigate(1)
+
+        @kb.add('s-tab', filter=in_form_editing)
+        def _form_prev_while_editing(event):
+            self._form_navigate(-1)
+
+        return kb
 
     def _get_form_label_style(self, idx: int) -> str:
-        if self.editing_idx is not None and idx == self.form_field_idx:
+        if self.is_editing() and idx == self.form_field_idx:
             return 'class:label-selected'
         return 'class:label'
 
     def _create_form_row(self, idx: int, label: str, field: TextArea) -> VSplit:
-        # Wrap field with padding and dynamic background (only when editing this field)
         def get_style() -> str:
             return 'class:field-editing' if self._in_any_form_field() and self.form_field_idx == idx else ''
 
         def get_label_text() -> str:
-            return f' {"▶" if self.editing_idx is not None and idx == self.form_field_idx else " "} {label}: '
+            return f' {"▶" if self.is_editing() and idx == self.form_field_idx else " "} {label}: '
 
         def get_label_style() -> str:
             return self._get_form_label_style(idx)
@@ -560,127 +566,42 @@ class CardEditor:
             ]
         )
 
-    def create_layout(self) -> Layout:
-        help_control = FormattedTextControl(text=self._get_help_text)
-
-        results_pane = VSplit(
-            [
-                Window(width=1),  # Left margin
-                ScrollablePane(self.results_window),
-                Window(width=1),  # Right margin
-            ]
-        )
-
-        form_rows: list[Container] = [
-            self.form_nav_window,  # Invisible focusable window for form navigation (no cursor)
-        ]
+    def create_layout(self) -> Container:
+        form_rows: list[Container] = [self.form_nav_window]
         for idx, (label, field) in enumerate(self.form_fields):
             form_rows.append(self._create_form_row(idx, label, field))
             if idx == 3:  # After past_participle
                 form_rows.append(Window(height=1))
-            if idx == 4:  # After translations (before example)
+            if idx == 4:  # After translations
                 form_rows.append(Window(height=1))
 
         form = VSplit(
             [
-                Window(width=1),  # Left margin
+                Window(width=1),
                 HSplit(form_rows),
-                Window(width=1),  # Right margin
+                Window(width=1),
             ]
         )
 
-        not_editing = Condition(lambda: not self._is_editing())
+        is_editing = Condition(self.is_editing)
 
-        is_editing = Condition(self._is_editing)
-
-        search_focused = Condition(self._search_focused)
-        results_focused = Condition(self._results_focused)
-
-        # Wrap search area with margins
-        search_with_margin = VSplit(
-            [
-                Window(width=1),  # Left margin
-                self.search_area,
-                Window(width=1),  # Right margin
-            ]
+        return ConditionalContainer(
+            Frame(form, title='Editor', style='class:frame-focused'),
+            filter=is_editing,
         )
 
-        # Use two frames with different styles, showing one based on focus
-        search_frame_focused = Frame(
-            search_with_margin, title='Search Lexemes', height=Dimension.exact(3), style='class:frame-focused'
-        )
-        search_frame_unfocused = Frame(search_with_margin, title='Search Lexemes', height=Dimension.exact(3))
-        results_frame_focused = Frame(results_pane, title='Results', style='class:frame-focused')
-        results_frame_unfocused = Frame(results_pane, title='Results')
-
-        main_content = HSplit(
-            [
-                ConditionalContainer(
-                    HSplit(
-                        [
-                            ConditionalContainer(search_frame_focused, filter=search_focused),
-                            ConditionalContainer(search_frame_unfocused, filter=~search_focused),
-                        ]
-                    ),
-                    filter=not_editing,
-                ),
-                ConditionalContainer(
-                    HSplit(
-                        [
-                            ConditionalContainer(results_frame_focused, filter=results_focused),
-                            ConditionalContainer(results_frame_unfocused, filter=~results_focused),
-                        ]
-                    ),
-                    filter=not_editing,
-                ),
-                ConditionalContainer(
-                    Frame(form, title='Editor', style='class:frame-focused'),
-                    filter=is_editing,
-                ),
-                Window(),  # Filler to push message/help to bottom
-                Window(content=self.message_control, height=1),
-                Window(content=help_control, height=1, style='class:dim'),
-            ]
-        )
-
-        # Delete confirmation dialog
-        def get_dialog_text():
-            if self.cards and self.selected_idx < len(self.cards):
-                _, card = self.cards[self.selected_idx]
-                return f'Delete "{card.lexeme}"?\n\n\n(y) Yes        (n) No'
-            return 'Delete this card?\n\n\n(y) Yes        (n) No'
-
-        delete_dialog = Frame(
-            body=HSplit(
-                [
-                    Window(height=1),  # Top margin
-                    Window(
-                        FormattedTextControl(text=get_dialog_text),
-                        height=4,
-                        width=Dimension(min=40),
-                        align=WindowAlign.CENTER,
-                    ),
-                    Window(height=1),  # Bottom margin
-                ]
-            ),
-            title='Confirm Delete',
-            style='class:frame-focused',
-        )
-
-        show_delete = Condition(lambda: self.show_delete_dialog)
-
-        # Save confirmation dialog
+    def create_save_dialog(self) -> Float:
         save_dialog = Frame(
             body=HSplit(
                 [
-                    Window(height=1),  # Top margin
+                    Window(height=1),
                     Window(
                         FormattedTextControl(text='Save changes?\n\n\n(y) Save        (n) Discard'),
                         height=4,
                         width=Dimension(min=40),
                         align=WindowAlign.CENTER,
                     ),
-                    Window(height=1),  # Bottom margin
+                    Window(height=1),
                 ]
             ),
             title='Save Changes',
@@ -689,32 +610,223 @@ class CardEditor:
 
         show_save = Condition(lambda: self.show_save_dialog)
 
+        return Float(content=ConditionalContainer(save_dialog, filter=show_save))
+
+
+class CardEditor:
+    def __init__(self, conn_string: str):
+        self.conn_string = conn_string
+        self.message = ''
+        self.app: Application | None = None
+
+        # Create panels with callbacks
+        self.search_panel = SearchPanel(
+            on_search=self._on_search,
+            on_focus_results=lambda: self.results_panel.focus(),
+            on_exit=lambda: self.app.exit() if self.app else None,
+        )
+
+        self.results_panel = ResultsPanel(
+            on_edit=self._start_editing,
+            on_delete=self._delete_card,
+            on_focus_search=lambda: self.search_panel.focus(),
+        )
+
+        self.editor_panel = EditorPanel(
+            on_save=self._save_card,
+            on_cancel=self._cancel_editing,
+        )
+
+        self.message_control = FormattedTextControl(text=lambda: self.message)
+
+        self.style = Style.from_dict(
+            {
+                'frame.border': 'fg:ansibrightblack',
+                'frame.label': 'fg:ansiwhite',
+                'frame-focused frame.border': 'fg:ansiblue',
+                'frame-focused frame.label': 'fg:ansiblue bold reverse',
+                'selected': 'reverse',
+                'selected-unfocused': 'fg:ansiblack bg:ansibrightblack',
+                'lexeme': 'bold fg:ansigreen',
+                'lexeme-dim': 'fg:ansigreen',
+                'dim': 'fg:ansibrightblack',
+                'label': 'fg:ansicyan',
+                'label-selected': 'fg:ansicyan bold reverse',
+                'field-editing': 'bg:#252525',
+                'dialog frame.border': 'fg:ansiblue',
+            }
+        )
+
+    def _start_editing(self, card_id: int, card: Card) -> None:
+        self.editor_panel.start_editing(card_id, card)
+        self.message = 'Navigate fields (j/k), edit (i/Enter), exit (Esc)'
+
+    def _cancel_editing(self) -> None:
+        self.results_panel.focus()
+        self.message = 'Edit cancelled'
+
+    def _save_card(self, card_id: int, card: Card) -> None:
+        try:
+            with psycopg.connect(self.conn_string) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        update cards set
+                            lexeme = %s,
+                            rp = %s,
+                            past_simple = %s,
+                            past_participle = %s,
+                            translations = %s,
+                            example = %s
+                        where id = %s
+                        """,
+                        (
+                            card.lexeme,
+                            card.rp,
+                            card.past_simple,
+                            card.past_participle,
+                            card.translations,
+                            card.example,
+                            card_id,
+                        ),
+                    )
+                conn.commit()
+            self.results_panel.update_card(card_id, card)
+            self.message = f'Saved: {card.lexeme}'
+        except psycopg.Error as e:
+            self.message = f'Error saving: {e}'
+        self.results_panel.focus()
+
+    def _delete_card(self, card_id: int, card: Card) -> None:
+        try:
+            with psycopg.connect(self.conn_string) as conn:
+                with conn.cursor() as cur:
+                    cur.execute('delete from cards where id = %s', (card_id,))
+                conn.commit()
+            self.results_panel.remove_card(card_id)
+            self.message = f'Deleted: {card.lexeme}'
+        except psycopg.Error as e:
+            self.message = f'Error deleting: {e}'
+
+    def _on_search(self, query: str) -> None:
+        try:
+            with psycopg.connect(self.conn_string) as conn:
+                with conn.cursor() as cur:
+                    if query:
+                        cur.execute(
+                            """
+                            select id, lexeme, rp, past_simple, past_participle, translations, example
+                            from cards
+                            where lexeme ilike %s
+                            order by lexeme
+                            limit 50
+                            """,
+                            (f'%{query}%',),
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            select id, lexeme, rp, past_simple, past_participle, translations, example
+                            from cards
+                            order by lexeme
+                            limit 50
+                            """
+                        )
+                    rows = cur.fetchall()
+
+            cards = [
+                (
+                    row[0],
+                    Card(
+                        lexeme=row[1],
+                        rp=row[2] or [],
+                        past_simple=row[3],
+                        past_participle=row[4],
+                        translations=row[5] or [],
+                        example=row[6] or [],
+                    ),
+                )
+                for row in rows
+            ]
+            self.results_panel.set_cards(cards)
+            if len(cards) == 50:
+                self.message = 'Showing first 50 cards (refine search for more)'
+            else:
+                self.message = f'Found {len(cards)} card(s)'
+        except psycopg.Error as e:
+            self.message = f'Search error: {e}'
+            self.results_panel.set_cards([])
+
+    def _get_help_text(self) -> str:
+        if self.editor_panel._in_any_form_field():
+            return 'Esc: exit field | Enter: save (single-line) | Tab/S-Tab: next/prev'
+        if self.editor_panel.show_save_dialog:
+            return '(y) Save | (n) Discard | Esc: back'
+        if self.editor_panel._in_form_nav():
+            return '↑/↓ or j/k: select field | i/Enter: edit | Esc: exit'
+        if self.results_panel.is_focused():
+            return '↑/↓ or j/k: navigate | Enter: edit | d: delete | /: search | Esc: back'
+        return 'Type to search | Enter: search | Esc: quit'
+
+    def _create_key_bindings(self) -> KeyBindingsBase:
+        kb = KeyBindings()
+
+        @kb.add('c-c')
+        def _exit(event):
+            event.app.exit()
+
+        # Merge key bindings from all panels
+        return merge_key_bindings([
+            kb,
+            self.search_panel.get_key_bindings(),
+            self.results_panel.get_key_bindings(),
+            self.editor_panel.get_key_bindings(),
+        ])
+
+    def _create_layout(self) -> Layout:
+        help_control = FormattedTextControl(text=self._get_help_text)
+
+        not_editing = Condition(lambda: not self.editor_panel.is_editing())
+
+        main_content = HSplit(
+            [
+                ConditionalContainer(self.search_panel.create_layout(), filter=not_editing),
+                ConditionalContainer(self.results_panel.create_layout(), filter=not_editing),
+                self.editor_panel.create_layout(),
+                Window(),  # Filler to push message/help to bottom
+                Window(content=self.message_control, height=1),
+                Window(content=help_control, height=1, style='class:dim'),
+            ]
+        )
+
         body = FloatContainer(
             content=main_content,
             floats=[
-                Float(
-                    content=ConditionalContainer(delete_dialog, filter=show_delete),
-                ),
-                Float(
-                    content=ConditionalContainer(save_dialog, filter=show_save),
-                ),
+                self.results_panel.create_delete_dialog(),
+                self.editor_panel.create_save_dialog(),
             ],
         )
 
-        return Layout(body, focused_element=self.search_area)
+        return Layout(body, focused_element=self.search_panel.search_area)
 
     def run(self) -> None:
         # Load initial list
-        self._on_search()
+        self._on_search('')
 
         self.app = Application(
-            layout=self.create_layout(),
+            layout=self._create_layout(),
             key_bindings=self._create_key_bindings(),
             style=self.style,
             full_screen=True,
             mouse_support=True,
         )
-        # Reduce escape key delay (default is 0.5s for ttimeoutlen, 1.0s for timeoutlen)
+
+        # Set app reference on all panels
+        self.search_panel.set_app(self.app)
+        self.results_panel.set_app(self.app)
+        self.editor_panel.set_app(self.app)
+
+        # Reduce escape key delay
         self.app.ttimeoutlen = 0.05
         self.app.timeoutlen = 0.05
         self.app.run()
