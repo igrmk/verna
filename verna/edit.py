@@ -95,9 +95,9 @@ class CardEditor:
         self.style = Style.from_dict(
             {
                 'frame.border': 'fg:ansibrightblack',
-                'frame.label': 'fg:ansibrightblack',
+                'frame.label': 'fg:ansiwhite',
                 'frame-focused frame.border': 'fg:ansiblue',
-                'frame-focused frame.label': 'fg:ansiblue bold',
+                'frame-focused frame.label': 'fg:ansiblue bold reverse',
                 'selected': 'reverse',
                 'selected-unfocused': 'fg:ansiblack bg:ansibrightblack',
                 'lexeme': 'bold fg:ansigreen',
@@ -634,7 +634,7 @@ class CardEditor:
                     filter=not_editing,
                 ),
                 ConditionalContainer(
-                    Frame(form, title='Editor'),
+                    Frame(form, title='Editor', style='class:frame-focused'),
                     filter=is_editing,
                 ),
                 Window(),  # Filler to push message/help to bottom
