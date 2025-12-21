@@ -2,15 +2,12 @@ import sys
 import psycopg
 import textwrap
 import requests
-from rich.console import Console
-from verna import db, db_types
+from verna import db, db_types, console
 
 from openai import OpenAI
 from pydantic import BaseModel
 
 from verna.config import get_parser, Sections, print_config, ReasoningLevel
-
-CON = Console()
 
 
 class Passage(BaseModel):
@@ -81,10 +78,9 @@ def main() -> None:
 
     tg_card_messages: list[str] = []
     for idx, card in enumerate(cards, 1):
-        CON.print()
-        card_text = db_types.format_card(card, idx)
-        CON.print(card_text, markup=False, highlight=False)
-        tg_card_messages.append(card_text.plain)
+        console.print_styled()
+        console.print_formatted(db_types.format_card(card, idx))
+        tg_card_messages.append(db_types.format_card_plain(card, idx))
 
     client = OpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
 
@@ -111,12 +107,12 @@ def main() -> None:
 
     data: Passage = resp.output_parsed
 
-    CON.print()
-    CON.print()
-    CON.print(data.english.strip(), markup=False, highlight=False)
-    CON.print()
-    CON.print()
-    CON.print(data.russian.strip(), markup=False)
+    console.print_styled()
+    console.print_styled()
+    console.print_styled(data.english.strip())
+    console.print_styled()
+    console.print_styled()
+    console.print_styled(data.russian.strip())
 
     if cfg.send_to_tg:
         try:

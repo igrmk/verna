@@ -1,25 +1,24 @@
-# Rich styles (for Console output)
-LEXEME_HEADER = 'cyan bold'
-LEXEME_HEADER_ITALIC = 'cyan bold italic'
-EXAMPLE = 'italic'
-SECTION_HEADER = 'bold'
-LOG = 'dim grey50'
-DEBUG = 'dim'
-DEBUG_STEP = 'underline dim'
-CARD_LABEL = 'dim'
-WARNING = 'yellow'
-NOTE_HEADER = 'bold'
-TRANSCRIPTION = 'italic'
-
-# prompt_toolkit styles (for TUI editor)
+# prompt_toolkit styles for console output and TUI editor
 PT_STYLES = {
+    # Console output styles
+    'lexeme': 'bold fg:ansicyan',
+    'lexeme-italic': 'bold italic fg:ansicyan',
+    'example': 'italic',
+    'section-header': 'bold',
+    'log': 'fg:ansibrightblack',
+    'debug': 'fg:ansibrightblack',
+    'debug-step': 'underline fg:ansibrightblack',
+    'card-label': 'fg:ansibrightblack',
+    'warning': 'fg:ansiyellow',
+    'note-header': 'bold',
+    'transcription': 'italic',
+    # TUI editor styles
     'frame.border': 'fg:ansibrightblack',
     'frame.label': 'fg:ansiwhite',
     'frame-focused frame.border': 'fg:ansicyan',
     'frame-focused frame.label': 'fg:ansicyan bold reverse',
     'selected': 'reverse',
     'selected-unfocused': 'fg:ansiblack bg:ansibrightblack',
-    'lexeme': 'bold fg:ansicyan',
     'lexeme-dim': 'fg:ansicyan',
     'dim': 'fg:ansibrightblack',
     'label': 'fg:ansicyan',

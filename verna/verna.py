@@ -16,13 +16,9 @@ from prompt_toolkit.key_binding import KeyBindings
 
 from verna.upper_str_enum import UpperStrEnum
 from verna.config import get_parser, Sections, print_config, ReasoningLevel, CefrLevel
-from verna import styles
-
-from rich.console import Console
+from verna import console
 
 from jinja2 import Environment, StrictUndefined
-
-CON = Console()
 
 JINJA_ENV = Environment(
     undefined=StrictUndefined,
@@ -94,16 +90,16 @@ async def _responses_parse(
 ):
     model_id = model or cfg.model
     if cfg.debug:
-        CON.print(step, style=styles.DEBUG_STEP)
-        CON.print()
-        CON.print('USER INPUT:', style=styles.DEBUG)
-        CON.print(user_input, style=styles.DEBUG)
-        CON.print()
-        CON.print('SCHEMA:', style=styles.DEBUG)
+        console.print_debug_step(step)
+        console.print_styled()
+        console.print_debug('USER INPUT:')
+        console.print_debug(user_input)
+        console.print_styled()
+        console.print_debug('SCHEMA:')
         schema = text_format.model_json_schema()
-        CON.print(json.dumps(schema, indent=2), style=styles.DEBUG)
-        CON.print()
-        CON.print(f'INSTRUCTIONS:\n{instructions}\n', style=styles.DEBUG)
+        console.print_debug(json.dumps(schema, indent=2))
+        console.print_styled()
+        console.print_debug(f'INSTRUCTIONS:\n{instructions}\n')
 
     input_messages: ResponseInputParam = [
         {'role': 'system', 'content': instructions},
@@ -124,7 +120,7 @@ async def _responses_parse(
             )
             break
         except APITimeoutError:
-            CON.print(f'[{step}] Request timed out after {TIMEOUT}s', style=styles.WARNING)
+            console.print_warning(f'[{step}] Request timed out after {TIMEOUT}s')
             try:
                 ans = input('Retry? [Y/n] ').strip().lower()
             except (EOFError, KeyboardInterrupt):
@@ -134,7 +130,7 @@ async def _responses_parse(
             raise SystemExit('Request timed out')
 
     elapsed = time.perf_counter() - start_time
-    CON.print(f'[{step}] {model_id} responded in {elapsed:.1f}s', style=styles.LOG, highlight=False)
+    console.print_log(f'[{step}] {model_id} responded in {elapsed:.1f}s')
 
     if resp.output_parsed is None:
         raise SystemExit(f'AI response could not be parsed ({step})')
@@ -315,39 +311,39 @@ EXAMPLE_INSTRUCTIONS = JINJA_ENV.from_string(
 
 
 def print_identified_language(lang_data: LanguageDetectionResponse) -> None:
-    CON.print(f'Language detected: {lang_data.language}')
-    CON.print()
+    console.print_styled(f'Language detected: {lang_data.language}')
+    console.print_styled()
 
 
 def print_typo_note(typo_note: str | None) -> None:
     if not typo_note:
         return
-    CON.print()
-    CON.print('TYPO NOTE', style=styles.NOTE_HEADER)
-    CON.print(typo_note)
+    console.print_styled()
+    console.print_styled('TYPO NOTE', 'class:note-header')
+    console.print_styled(typo_note)
 
 
 def print_translation(translation_data: TranslationResponse) -> None:
     if translation_data.rp:
-        CON.print(f'/{translation_data.rp}/', style=styles.TRANSCRIPTION)
-        CON.print()
-    CON.print(translation_data.translation, markup=False)
-    CON.print()
+        console.print_styled(f'/{translation_data.rp}/', 'class:transcription')
+        console.print_styled()
+    console.print_styled(translation_data.translation)
+    console.print_styled()
 
 
 def print_extracted_lexemes(items: list[LexemeExtractionResponse.Item]) -> None:
     if not items:
-        CON.print('No lexemes for memorisation found')
+        console.print_styled('No lexemes for memorisation found')
         return
     header = '▶ LEXEMES'
-    CON.print(header, style=styles.SECTION_HEADER)
-    CON.print('─' * len(header), style=styles.SECTION_HEADER)
-    CON.print()
+    console.print_styled(header, 'class:section-header')
+    console.print_styled('─' * len(header), 'class:section-header')
+    console.print_styled()
     for idx, item in enumerate(items, 1):
-        CON.print(f'[{idx}] {item.lexeme} ({item.cefr})', style=styles.LEXEME_HEADER, highlight=False)
+        console.print_styled(f'[{idx}] {item.lexeme} ({item.cefr})', 'class:lexeme')
         if item.example:
-            CON.print(f'  > {item.example}', style=styles.EXAMPLE)
-        CON.print()
+            console.print_styled(f'  > {item.example}', 'class:example')
+        console.print_styled()
 
 
 class ConfirmResult(Enum):
@@ -371,7 +367,7 @@ def confirm(prompt: str) -> ConfirmResult:
             return ConfirmResult.EXAMPLE
         if ans == 'q':
             return ConfirmResult.QUIT
-        CON.print('Please enter y, n, e, or q')
+        console.print_styled('Please enter y, n, e, or q')
 
 
 def to_db_card(card) -> db_types.Card:
@@ -405,8 +401,8 @@ def save_card(cfg: argparse.Namespace, card: db_types.Card) -> None:
     try:
         with psycopg.connect(cfg.db_conn_string) as conn:
             inserted = db.save_card(conn, card)
-            CON.print('Saved' if inserted else 'Merged')
-            CON.print()
+            console.print_styled('Saved' if inserted else 'Merged')
+            console.print_styled()
     except psycopg.Error as e:
         print(f'Failed to save cards to postgres: {e}', file=sys.stderr)
         sys.exit(2)
@@ -426,16 +422,16 @@ def prompt_card_selection(items: list[LexemeExtractionResponse.Item]) -> list[in
             num = int(ans)
             if 1 <= num <= len(items):
                 return [num - 1]
-            CON.print(f'Please enter a number between 1 and {len(items)}')
+            console.print_styled(f'Please enter a number between 1 and {len(items)}')
         except ValueError:
-            CON.print('Please enter a valid number, a for all, or q to quit')
+            console.print_styled('Please enter a valid number, a for all, or q to quit')
 
 
 async def save_single_lexeme(
     cfg: argparse.Namespace, client: AsyncOpenAI, item: LexemeExtractionResponse.Item, idx: int
 ) -> bool:
     """Save a single lexeme. Returns False if user wants to quit."""
-    CON.print()
+    console.print_styled()
     lexeme_text = item.lexeme.strip()
     tr = await translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
     card = Card(
@@ -449,10 +445,10 @@ async def save_single_lexeme(
     proceed = True
     while proceed:
         proceed = False
-        CON.print(db_types.format_card(db_card, idx + 1), markup=False, highlight=False)
-        CON.print()
+        console.print_formatted(db_types.format_card(db_card, idx + 1))
+        console.print_styled()
         res = confirm('Save?')
-        CON.print()
+        console.print_styled()
         if res == ConfirmResult.QUIT:
             return False
         if res == ConfirmResult.YES:
@@ -520,7 +516,7 @@ async def work() -> int:
     print_identified_language(lang_data)
 
     if lang_data.language == Language.OTHER:
-        CON.print('UNSUPPORTED LANGUAGE')
+        console.print_styled('UNSUPPORTED LANGUAGE')
         return 0
 
     if lang_data.language == Language.ENGLISH and len(query.split()) == 1:
@@ -531,7 +527,7 @@ async def work() -> int:
             tr = await translate_lexeme(cfg, client, lexeme_text=query)
             card = Card(lexeme=tr.lexeme, translations=tr.translations, example=None)
             db_card = to_db_card(card)
-            CON.print(db_types.format_card(db_card, 1), markup=False, highlight=False)
+            console.print_formatted(db_types.format_card(db_card, 1))
         return 0
 
     translation_task = asyncio.create_task(translate_text(cfg, client, query=query, source_language=lang_data.language))
@@ -549,9 +545,9 @@ async def work() -> int:
 
     if sys.stdin.isatty() and cfg.db_conn_string and lexeme_items:
         header = '▶ SAVING CARDS'
-        CON.print(header, style=styles.SECTION_HEADER)
-        CON.print('─' * len(header), style=styles.SECTION_HEADER)
-        CON.print()
+        console.print_styled(header, 'class:section-header')
+        console.print_styled('─' * len(header), 'class:section-header')
+        console.print_styled()
         await save_extracted_lexemes(cfg, client, lexeme_items)
     return 0
 

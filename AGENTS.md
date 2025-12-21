@@ -11,8 +11,7 @@
 - **Database**: PostgreSQL (via `psycopg`)
 - **CLI**:
     `configargparse` for configuration,
-    `rich` for terminal output,
-    `prompt_toolkit` for interactive input
+    `prompt_toolkit` for terminal output and interactive input
 - **Templating**: Jinja2 for AI prompt templates
 
 ## Project Structure
@@ -23,9 +22,10 @@ verna/
 ├── random_cards.py   # Daily cards + story generator (entry point: `verna-cards`)
 ├── edit.py           # TUI editor for lexemes (entry point: `verna-edit`)
 ├── config.py         # CLI argument parsing and configuration
+├── console.py        # Console output helpers
 ├── db.py             # Database operations for cards table
 ├── db_types.py       # Database card dataclass and formatting
-├── styles.py         # Rich and prompt_toolkit styles
+├── styles.py         # prompt_toolkit styles
 ├── migrator.py       # Database migration runner
 ├── create_spec.py    # DigitalOcean App Platform spec generator
 ├── verna.ini         # Default configuration file
