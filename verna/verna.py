@@ -12,11 +12,14 @@ from openai.types.responses import ResponseInputParam
 from openai.types.shared_params import Reasoning
 from pydantic import BaseModel, Field
 from prompt_toolkit import PromptSession
+from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout import Layout, HSplit, Window, FormattedTextControl
+from prompt_toolkit.styles import Style
 
 from verna.upper_str_enum import UpperStrEnum
 from verna.config import get_parser, Sections, print_config, ReasoningLevel, CefrLevel
-from verna import console
+from verna import console, styles
 
 from jinja2 import Environment, StrictUndefined
 
@@ -331,19 +334,11 @@ def print_translation(translation_data: TranslationResponse) -> None:
     console.print_styled()
 
 
-def print_extracted_lexemes(items: list[LexemeExtractionResponse.Item]) -> None:
-    if not items:
-        console.print_styled('No lexemes for memorisation found')
-        return
-    header = '▶ LEXEMES'
+def print_save_cards_header() -> None:
+    header = 'SAVE CARDS'
     console.print_styled(header, 'class:section-header')
     console.print_styled('─' * len(header), 'class:section-header')
     console.print_styled()
-    for idx, item in enumerate(items, 1):
-        console.print_styled(f'[{idx}] {item.lexeme} ({item.cefr})', 'class:lexeme')
-        if item.example:
-            console.print_styled(f'  > {item.example}', 'class:example')
-        console.print_styled()
 
 
 class ConfirmResult(Enum):
@@ -408,23 +403,90 @@ def save_card(cfg: argparse.Namespace, card: db_types.Card) -> None:
         sys.exit(2)
 
 
-def prompt_card_selection(items: list[LexemeExtractionResponse.Item]) -> list[int]:
-    while True:
-        try:
-            ans = input('Card number (a for all, q to quit): ').strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            return []
-        if ans == 'q':
-            return []
-        if ans == 'a':
-            return list(range(len(items)))
-        try:
-            num = int(ans)
-            if 1 <= num <= len(items):
-                return [num - 1]
-            console.print_styled(f'Please enter a number between 1 and {len(items)}')
-        except ValueError:
-            console.print_styled('Please enter a valid number, a for all, or q to quit')
+class SelectionResult(Enum):
+    SELECTED = auto()
+    ALL = auto()
+    QUIT = auto()
+
+
+class LexemeSelector:
+    def __init__(self, items: list[LexemeExtractionResponse.Item]):
+        self.items = items
+        self.selected_idx = 0
+        self.result: SelectionResult = SelectionResult.QUIT
+
+    def _get_formatted_text(self) -> list[tuple[str, str]]:
+        lines: list[tuple[str, str]] = []
+        for idx, item in enumerate(self.items):
+            is_selected = idx == self.selected_idx
+            prefix = ' ▶ ' if is_selected else '   '
+            style = 'class:selected class:lexeme' if is_selected else 'class:lexeme-dim'
+            lines.append((style, f'{prefix}[{idx + 1}] {item.lexeme} ({item.cefr})'))
+            if item.example:
+                lines.append(('class:example', f'\n     > {item.example}'))
+            lines.append(('', '\n\n'))
+        lines.append(('class:dim', '↑/↓/j/k: navigate | Enter/1-9: select | a: all | q: quit'))
+        return lines
+
+    def _create_key_bindings(self) -> KeyBindings:
+        kb = KeyBindings()
+
+        @kb.add('up')
+        @kb.add('k')
+        def _up(event):
+            if self.selected_idx > 0:
+                self.selected_idx -= 1
+
+        @kb.add('down')
+        @kb.add('j')
+        def _down(event):
+            if self.selected_idx < len(self.items) - 1:
+                self.selected_idx += 1
+
+        @kb.add('enter')
+        def _select(event):
+            self.result = SelectionResult.SELECTED
+            event.app.exit()
+
+        @kb.add('a')
+        def _all(event):
+            self.result = SelectionResult.ALL
+            event.app.exit()
+
+        @kb.add('q')
+        @kb.add('escape')
+        def _quit(event):
+            self.result = SelectionResult.QUIT
+            event.app.exit()
+
+        for i in range(1, 10):
+
+            @kb.add(str(i), eager=True)
+            def _number(event, idx=i - 1):
+                if idx < len(self.items):
+                    self.selected_idx = idx
+                    self.result = SelectionResult.SELECTED
+                    event.app.exit()
+
+        return kb
+
+    async def run(self) -> tuple[SelectionResult, int]:
+        layout = Layout(
+            HSplit(
+                [
+                    Window(FormattedTextControl(self._get_formatted_text, show_cursor=False), wrap_lines=True),
+                ]
+            )
+        )
+        style = Style.from_dict(styles.PT_STYLES)
+        app: Application = Application(
+            layout=layout,
+            key_bindings=self._create_key_bindings(),
+            style=style,
+            full_screen=False,
+        )
+        await app.run_async()
+        return self.result, self.selected_idx
 
 
 async def save_single_lexeme(
@@ -469,10 +531,15 @@ async def save_extracted_lexemes(
         await save_single_lexeme(cfg, client, items[0], 0)
         return
     while True:
-        indices = prompt_card_selection(items)
-        if not indices:
+        selector = LexemeSelector(items)
+        result, idx = await selector.run()
+        if result == SelectionResult.QUIT:
             return
-        for idx in indices:
+        if result == SelectionResult.ALL:
+            for i in range(len(items)):
+                if not await save_single_lexeme(cfg, client, items[i], i):
+                    return
+        elif result == SelectionResult.SELECTED:
             if not await save_single_lexeme(cfg, client, items[idx], idx):
                 return
 
@@ -541,16 +608,18 @@ async def work() -> int:
     if lang_data.language == Language.ENGLISH:
         lexeme_data = await lexeme_task
         lexeme_items = [item for item in lexeme_data.items if item.cefr >= cfg.level]
-        print_extracted_lexemes(lexeme_items)
-    else:
-        lexeme_items = None
-
-    if sys.stdin.isatty() and cfg.db_conn_string and lexeme_items:
-        header = '▶ SAVING CARDS'
-        console.print_styled(header, 'class:section-header')
-        console.print_styled('─' * len(header), 'class:section-header')
-        console.print_styled()
-        await save_extracted_lexemes(cfg, client, lexeme_items)
+        if lexeme_items:
+            print_save_cards_header()
+            if sys.stdin.isatty() and cfg.db_conn_string:
+                await save_extracted_lexemes(cfg, client, lexeme_items)
+            else:
+                for idx, item in enumerate(lexeme_items, 1):
+                    console.print_styled(f'[{idx}] {item.lexeme} ({item.cefr})', 'class:lexeme')
+                    if item.example:
+                        console.print_styled(f'  > {item.example}', 'class:example')
+                    console.print_styled()
+        else:
+            console.print_styled('No lexemes for memorisation found')
     return 0
 
 
