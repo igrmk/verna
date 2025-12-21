@@ -12,7 +12,6 @@ class Sections(StrEnum):
     TELEGRAM = 'telegram'
     RANDOM = 'random'
     VERNA = 'verna'
-    REMOVE = 'remove'
     AI = 'ai'
     EDITOR = 'editor'
 

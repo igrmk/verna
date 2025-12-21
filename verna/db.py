@@ -82,22 +82,6 @@ def delete_card_by_id(conn: Connection, card_id: int) -> None:
     conn.commit()
 
 
-def delete_card_by_lexeme(conn: Connection, lexeme: str) -> bool:
-    """Delete a card by lexeme (case-insensitive). Returns True if found and deleted."""
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            delete from cards
-            where lower(lexeme) = lower(%s)
-            returning id;
-            """,
-            (lexeme,),
-        )
-        row = cur.fetchone()
-    conn.commit()
-    return row is not None
-
-
 def search_cards(conn: Connection, query: str, limit: int = 50) -> list[tuple[int, Card]]:
     """Search cards by lexeme with ILIKE. Returns list of (id, card) tuples."""
     with conn.cursor() as cur:
