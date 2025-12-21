@@ -86,6 +86,7 @@ Run migrations with: `python -m verna.migrator`
 - Linting: Ruff
 - Type checking: mypy
 - Run locally: python -m verna
+- Before committing, always run: `ruff check --fix verna/ && ruff format verna/ && mypy verna/`
 
 ## Code Style
 
