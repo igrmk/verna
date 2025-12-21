@@ -1,21 +1,7 @@
 import sys
 import psycopg
+from verna import db
 from verna.config import get_parser, Sections, print_config
-
-
-def remove_lexeme(conn, lexeme: str) -> bool:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-            delete from cards
-            where lower(lexeme) = lower(%s)
-            returning id;
-            """,
-            (lexeme,),
-        )
-        row = cur.fetchone()
-    conn.commit()
-    return row is not None
 
 
 def main() -> int:
@@ -33,7 +19,7 @@ def main() -> int:
 
     try:
         with psycopg.connect(cfg.db_conn_string) as conn:
-            removed = remove_lexeme(conn, q)
+            removed = db.delete_card_by_lexeme(conn, q)
             if removed:
                 print(f'Removed lexeme: {q}')
             else:

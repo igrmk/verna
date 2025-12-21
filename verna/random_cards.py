@@ -3,7 +3,7 @@ import psycopg
 import textwrap
 import requests
 from rich.console import Console
-from verna import db_types
+from verna import db, db_types
 
 from openai import OpenAI
 from pydantic import BaseModel
@@ -47,31 +47,6 @@ def send_to_telegram_all(
         send_telegram_message(russian.strip(), bot_token=bot_token, chat_id=chat_id)
 
 
-def fetch_random_cards(conn, limit: int) -> list[db_types.Card]:
-    with conn.cursor() as cur:
-        cur.execute(
-            """
-                select lexeme, rp, past_simple, past_participle, translations, example
-                from cards
-                order by random()
-                limit %s;
-            """,
-            (limit,),
-        )
-        rows = cur.fetchall()
-        return [
-            db_types.Card(
-                lexeme=row[0],
-                rp=row[1],
-                past_simple=row[2],
-                past_participle=row[3],
-                translations=row[4],
-                example=row[5],
-            )
-            for row in rows
-        ]
-
-
 INSTRUCTIONS = textwrap.dedent("""
     You are a text generator. Output ONLY JSON that matches the given schema.
     Produce two fields:
@@ -98,7 +73,7 @@ def main() -> None:
         raise SystemExit('--send-to-tg requires --tg-bot-token and --tg-chat-id')
 
     with psycopg.connect(cfg.db_conn_string) as conn:
-        cards = fetch_random_cards(conn, cfg.limit)
+        cards = db.fetch_random_cards(conn, cfg.limit)
 
     if not cards:
         print('No lexemes found in cards', file=sys.stderr)

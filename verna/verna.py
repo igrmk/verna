@@ -4,7 +4,7 @@ import json
 import sys
 import textwrap
 import argparse
-from verna import db_types
+from verna import db, db_types
 from enum import Enum, auto
 import psycopg
 from openai import APITimeoutError, AsyncOpenAI
@@ -401,48 +401,9 @@ async def make_example(
 def save_card(cfg: argparse.Namespace, card: db_types.Card) -> None:
     try:
         with psycopg.connect(cfg.db_conn_string) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                        insert into cards (
-                            lexeme,
-                            rp,
-                            past_simple,
-                            past_participle,
-                            translations,
-                            example
-                        )
-                        values (%s, %s, %s, %s, %s, %s)
-                        on conflict (lower(lexeme)) do update set
-                            translations = (
-                                select coalesce(array_agg(distinct x), '{}')
-                                from unnest(cards.translations || excluded.translations) as x
-                            ),
-                            rp = (
-                                select coalesce(array_agg(distinct x), '{}')
-                                from unnest(cards.rp || excluded.rp) as x
-                            ),
-                            example = (
-                                select coalesce(array_agg(distinct x), '{}')
-                                from unnest(cards.example || excluded.example) as x
-                            )
-                        returning (xmax = 0) as inserted;
-                    """,
-                    (
-                        card.lexeme,
-                        card.rp,
-                        card.past_simple,
-                        card.past_participle,
-                        card.translations,
-                        card.example,
-                    ),
-                )
-                row = cur.fetchone()
-                assert row is not None
-                inserted = row[0]
-                CON.print('Saved' if inserted else 'Merged')
-                CON.print()
-            conn.commit()
+            inserted = db.save_card(conn, card)
+            CON.print('Saved' if inserted else 'Merged')
+            CON.print()
     except psycopg.Error as e:
         print(f'Failed to save cards to postgres: {e}', file=sys.stderr)
         sys.exit(2)

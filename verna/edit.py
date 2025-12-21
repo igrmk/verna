@@ -1,6 +1,7 @@
 import sys
 import psycopg
 from prompt_toolkit import Application
+from verna import db
 from prompt_toolkit.filters import Condition, has_focus
 from prompt_toolkit.key_binding import KeyBindings, KeyBindingsBase, merge_key_bindings
 from prompt_toolkit.data_structures import Point
@@ -673,29 +674,7 @@ class CardEditor:
     def _save_card(self, card_id: int, card: Card) -> None:
         try:
             with psycopg.connect(self.conn_string) as conn:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        """
-                        update cards set
-                            lexeme = %s,
-                            rp = %s,
-                            past_simple = %s,
-                            past_participle = %s,
-                            translations = %s,
-                            example = %s
-                        where id = %s
-                        """,
-                        (
-                            card.lexeme,
-                            card.rp,
-                            card.past_simple,
-                            card.past_participle,
-                            card.translations,
-                            card.example,
-                            card_id,
-                        ),
-                    )
-                conn.commit()
+                db.update_card(conn, card_id, card)
             self.results_panel.update_card(card_id, card)
             self.message = f'Saved: {card.lexeme}'
         except psycopg.Error as e:
@@ -705,9 +684,7 @@ class CardEditor:
     def _delete_card(self, card_id: int, card: Card) -> None:
         try:
             with psycopg.connect(self.conn_string) as conn:
-                with conn.cursor() as cur:
-                    cur.execute('delete from cards where id = %s', (card_id,))
-                conn.commit()
+                db.delete_card_by_id(conn, card_id)
             self.results_panel.remove_card(card_id)
             self.message = f'Deleted: {card.lexeme}'
         except psycopg.Error as e:
@@ -716,43 +693,7 @@ class CardEditor:
     def _on_search(self, query: str) -> None:
         try:
             with psycopg.connect(self.conn_string) as conn:
-                with conn.cursor() as cur:
-                    if query:
-                        cur.execute(
-                            """
-                            select id, lexeme, rp, past_simple, past_participle, translations, example
-                            from cards
-                            where lexeme ilike %s
-                            order by lexeme
-                            limit 50
-                            """,
-                            (f'%{query}%',),
-                        )
-                    else:
-                        cur.execute(
-                            """
-                            select id, lexeme, rp, past_simple, past_participle, translations, example
-                            from cards
-                            order by lexeme
-                            limit 50
-                            """
-                        )
-                    rows = cur.fetchall()
-
-            cards = [
-                (
-                    row[0],
-                    Card(
-                        lexeme=row[1],
-                        rp=row[2] or [],
-                        past_simple=row[3],
-                        past_participle=row[4],
-                        translations=row[5] or [],
-                        example=row[6] or [],
-                    ),
-                )
-                for row in rows
-            ]
+                cards = db.search_cards(conn, query, limit=50)
             self.results_panel.set_cards(cards)
             if len(cards) == 50:
                 self.message = 'Showing first 50 cards (refine search for more)'
