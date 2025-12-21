@@ -1,5 +1,5 @@
 from prompt_toolkit import print_formatted_text
-from prompt_toolkit.formatted_text import FormattedText, AnyFormattedText
+from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit.styles import Style
 
 from verna import styles
@@ -15,8 +15,8 @@ def print_styled(text: str = '', style: str = '') -> None:
     print_formatted_text(FormattedText([(style, text)]), style=_style)
 
 
-def print_formatted(formatted_text: AnyFormattedText) -> None:
-    print_formatted_text(formatted_text, style=_style)
+def print_formatted(parts: list[tuple[str, str]]) -> None:
+    print_formatted_text(FormattedText(parts), style=_style)
 
 
 def print_log(text: str) -> None:

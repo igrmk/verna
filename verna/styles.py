@@ -3,9 +3,9 @@ PT_STYLES = {
     # Console output styles
     'lexeme': 'bold fg:ansicyan',
     'lexeme-italic': 'bold italic fg:ansicyan',
-    'example': 'italic',
+    'example': 'italic fg:#bbbbbb',
     'section-header': 'bold',
-    'log': 'fg:ansibrightblack',
+    'log': 'fg:#555555',
     'debug': 'fg:ansibrightblack',
     'debug-step': 'underline fg:ansibrightblack',
     'card-label': 'fg:ansibrightblack',

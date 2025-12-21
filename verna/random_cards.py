@@ -79,8 +79,9 @@ def main() -> None:
     tg_card_messages: list[str] = []
     for idx, card in enumerate(cards, 1):
         console.print_styled()
-        console.print_formatted(db_types.format_card(card, idx))
-        tg_card_messages.append(db_types.format_card_plain(card, idx))
+        parts = [('class:lexeme', f'[{idx}] ')] + db_types.format_card(card, indent=2)
+        console.print_formatted(parts)
+        tg_card_messages.append(f'[{idx}] ' + db_types.format_card_plain(card))
 
     client = OpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
 

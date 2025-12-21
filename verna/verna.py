@@ -445,7 +445,8 @@ async def save_single_lexeme(
     proceed = True
     while proceed:
         proceed = False
-        console.print_formatted(db_types.format_card(db_card, idx + 1))
+        parts = [('class:lexeme', f'[{idx + 1}] ')] + db_types.format_card(db_card, indent=2)
+        console.print_formatted(parts)
         console.print_styled()
         res = confirm('Save?')
         console.print_styled()
@@ -527,7 +528,8 @@ async def work() -> int:
             tr = await translate_lexeme(cfg, client, lexeme_text=query)
             card = Card(lexeme=tr.lexeme, translations=tr.translations, example=None)
             db_card = to_db_card(card)
-            console.print_formatted(db_types.format_card(db_card, 1))
+            parts = [('class:lexeme', '[1] ')] + db_types.format_card(db_card, indent=2)
+            console.print_formatted(parts)
         return 0
 
     translation_task = asyncio.create_task(translate_text(cfg, client, query=query, source_language=lang_data.language))

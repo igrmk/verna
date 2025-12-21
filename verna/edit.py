@@ -23,7 +23,7 @@ from prompt_toolkit.widgets import Frame, TextArea
 from prompt_toolkit.styles import Style
 
 from verna.config import get_parser, Sections, print_config
-from verna.db_types import Card
+from verna.db_types import Card, format_card
 from verna import styles
 
 from typing import Callable
@@ -188,40 +188,23 @@ class ResultsPanel:
             return [('class:dim', 'No results.')]
 
         results_focused = self.is_focused()
-        lines = []
+        lines: list[tuple[str, str]] = []
         for idx, (card_id, card) in enumerate(self.cards):
             is_selected = idx == self.selected_idx
 
             prefix = ' ▶ ' if is_selected else '   '
             if is_selected and not results_focused:
-                style = 'class:selected-unfocused'
+                prefix_style = 'class:selected-unfocused'
             elif is_selected:
-                style = 'class:selected class:lexeme'
+                prefix_style = 'class:selected class:lexeme'
             elif not results_focused:
-                style = 'class:lexeme-dim'
+                prefix_style = 'class:lexeme-dim'
             else:
-                style = 'class:lexeme'
+                prefix_style = 'class:lexeme'
 
-            lexeme_line = f'{prefix}{card.lexeme}'
-            if card.rp:
-                lexeme_line += ' /' + '/, /'.join(card.rp) + '/'
-
-            lines.append((style, lexeme_line))
-            lines.append(('', '\n'))
-
-            if card.past_simple:
-                lines.append(('class:dim', f'    past: {card.past_simple}'))
-                if card.past_participle:
-                    lines.append(('class:dim', f' / {card.past_participle}'))
-                lines.append(('', '\n'))
-
-            for t in card.translations:
-                lines.append(('', f'    • {t}\n'))
-
-            for ex in card.example:
-                lines.append(('class:dim', f'    > {ex}\n'))
-
-            lines.append(('', '\n'))
+            lines.append((prefix_style, prefix))
+            lines.extend(format_card(card, focused=results_focused, indent=3))
+            lines.append(('', '\n\n'))
 
         return lines
 
