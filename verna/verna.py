@@ -565,24 +565,21 @@ def work() -> int:
             CON.print(db_types.format_card(db_card, 1), markup=False)
         return 0
 
-    if lang_data.language == Language.ENGLISH:
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            translation_future = executor.submit(
-                translate_text, cfg, client, query=query, source_language=lang_data.language
-            )
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        translation_future = executor.submit(
+            translate_text, cfg, client, query=query, source_language=lang_data.language
+        )
+        if lang_data.language == Language.ENGLISH:
             lexeme_future = executor.submit(extract_lexemes, cfg, client, query=query)
-            translation_data = translation_future.result()
+        translation_data = translation_future.result()
+        print_translation(translation_data)
+        print_typo_note(translation_data.typo_note)
+        if lang_data.language == Language.ENGLISH:
             lexeme_data = lexeme_future.result()
-        lexeme_items = [item for item in lexeme_data.items if item.cefr >= cfg.level]
-    else:
-        translation_data = translate_text(cfg, client, query=query, source_language=lang_data.language)
-        lexeme_items = None
-
-    print_translation(translation_data)
-    print_typo_note(translation_data.typo_note)
-
-    if lexeme_items is not None:
-        print_extracted_lexemes(lexeme_items)
+            lexeme_items = [item for item in lexeme_data.items if item.cefr >= cfg.level]
+            print_extracted_lexemes(lexeme_items)
+        else:
+            lexeme_items = None
 
     if sys.stdin.isatty() and cfg.db_conn_string and lexeme_items:
         CON.print('SAVING CARDS', style='bold underline')
