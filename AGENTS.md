@@ -93,7 +93,11 @@ Run migrations with: `python -m verna.migrator`
 - Line length: 120 characters
 - Quote style: single quotes (') or triple double quotes (""")
 - Type hints: Python 3.12+ style (`list[str]`, `str | None`)
-- Commit style: conventional
+
+## Commits
+
+- Use conventional commit style
+- Use simple `git commit -m "message"` without Co-Authored-By or other footers
 
 ## Testing
 
