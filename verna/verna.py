@@ -477,7 +477,7 @@ async def save_extracted_lexemes(
                 return
 
 
-def read_interactively() -> str:
+async def read_interactively() -> str:
     kb = KeyBindings()
 
     @kb.add('c-d')
@@ -488,7 +488,7 @@ def read_interactively() -> str:
         return ' ' * width if is_soft_wrap else ' ' * (width - 2) + '… '
 
     session: PromptSession = PromptSession()
-    return session.prompt('Ctrl-D> ', multiline=True, prompt_continuation=cont, key_bindings=kb)
+    return await session.prompt_async('Ctrl-D> ', multiline=True, prompt_continuation=cont, key_bindings=kb)
 
 
 async def work() -> int:
@@ -508,7 +508,7 @@ async def work() -> int:
             if not query:
                 raise no_query_error
     if not query:
-        query = read_interactively().strip()
+        query = (await read_interactively()).strip()
     if not query:
         raise no_query_error
 
