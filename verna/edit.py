@@ -87,7 +87,12 @@ class SearchPanel:
         return HSplit(
             [
                 ConditionalContainer(
-                    Frame(search_with_margin, title='Search Lexemes', height=Dimension.exact(3), style='class:frame-focused'),
+                    Frame(
+                        search_with_margin,
+                        title='Search Lexemes',
+                        height=Dimension.exact(3),
+                        style='class:frame-focused',
+                    ),
                     filter=is_focused,
                 ),
                 ConditionalContainer(
@@ -776,12 +781,14 @@ class CardEditor:
             event.app.exit()
 
         # Merge key bindings from all panels
-        return merge_key_bindings([
-            kb,
-            self.search_panel.get_key_bindings(),
-            self.results_panel.get_key_bindings(),
-            self.editor_panel.get_key_bindings(),
-        ])
+        return merge_key_bindings(
+            [
+                kb,
+                self.search_panel.get_key_bindings(),
+                self.results_panel.get_key_bindings(),
+                self.editor_panel.get_key_bindings(),
+            ]
+        )
 
     def _create_layout(self) -> Layout:
         help_control = FormattedTextControl(text=self._get_help_text)

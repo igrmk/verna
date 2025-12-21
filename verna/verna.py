@@ -1,13 +1,13 @@
+import asyncio
 import time
 import json
 import sys
 import textwrap
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 from verna import db_types
 from enum import Enum, auto
 import psycopg
-from openai import APITimeoutError, OpenAI
+from openai import APITimeoutError, AsyncOpenAI
 from openai.types.responses import ResponseInputParam
 from openai.types.shared_params import Reasoning
 from pydantic import BaseModel, Field
@@ -81,9 +81,9 @@ class ExampleResponse(BaseModel):
 TIMEOUT = 10
 
 
-def _responses_parse(
+async def _responses_parse(
     cfg: argparse.Namespace,
-    client: OpenAI,
+    client: AsyncOpenAI,
     *,
     step: str,
     instructions: str,
@@ -113,7 +113,7 @@ def _responses_parse(
     while True:
         start_time = time.perf_counter()
         try:
-            resp = client.responses.parse(
+            resp = await client.responses.parse(
                 model=model_id,
                 instructions=GENERAL_INSTRUCTIONS,
                 input=input_messages,
@@ -140,8 +140,8 @@ def _responses_parse(
     return resp.output_parsed
 
 
-def detect_language(cfg: argparse.Namespace, client: OpenAI, query: str) -> LanguageDetectionResponse:
-    return _responses_parse(
+async def detect_language(cfg: argparse.Namespace, client: AsyncOpenAI, query: str) -> LanguageDetectionResponse:
+    return await _responses_parse(
         cfg,
         client,
         step='LANGUAGE DETECTION',
@@ -152,9 +152,9 @@ def detect_language(cfg: argparse.Namespace, client: OpenAI, query: str) -> Lang
     )
 
 
-def translate_text(
+async def translate_text(
     cfg: argparse.Namespace,
-    client: OpenAI,
+    client: AsyncOpenAI,
     *,
     query: str,
     source_language: Language,
@@ -163,7 +163,7 @@ def translate_text(
         target_language='Russian' if source_language == Language.ENGLISH else 'English',
         word_count=len(query.split()),
     )
-    return _responses_parse(
+    return await _responses_parse(
         cfg,
         client,
         step='TRANSLATION',
@@ -174,8 +174,8 @@ def translate_text(
     )
 
 
-def extract_lexemes(cfg: argparse.Namespace, client: OpenAI, *, query: str) -> LexemeExtractionResponse:
-    return _responses_parse(
+async def extract_lexemes(cfg: argparse.Namespace, client: AsyncOpenAI, *, query: str) -> LexemeExtractionResponse:
+    return await _responses_parse(
         cfg,
         client,
         step='LEXEME EXTRACTION',
@@ -186,15 +186,15 @@ def extract_lexemes(cfg: argparse.Namespace, client: OpenAI, *, query: str) -> L
     )
 
 
-def translate_lexeme(
+async def translate_lexeme(
     cfg: argparse.Namespace,
-    client: OpenAI,
+    client: AsyncOpenAI,
     *,
     lexeme_text: str,
     example: str | None = None,
 ) -> LexemeTranslationResponse:
     instructions = LEXEME_TRANSLATION_INSTRUCTIONS.render(example=example)
-    return _responses_parse(
+    return await _responses_parse(
         cfg,
         client,
         step='LEXEME TRANSLATION',
@@ -382,10 +382,11 @@ def to_db_card(card) -> db_types.Card:
     )
 
 
-def make_example(cfg: argparse.Namespace, card: db_types.Card, previous_examples: list[str]) -> None:
-    client = OpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
+async def make_example(
+    cfg: argparse.Namespace, client: AsyncOpenAI, card: db_types.Card, previous_examples: list[str]
+) -> None:
     instructions = EXAMPLE_INSTRUCTIONS.render(previous_examples=previous_examples)
-    data: ExampleResponse = _responses_parse(
+    data: ExampleResponse = await _responses_parse(
         cfg,
         client,
         step=f'EXAMPLE: {card.lexeme}',
@@ -466,11 +467,13 @@ def prompt_card_selection(items: list[LexemeExtractionResponse.Item]) -> list[in
             CON.print('Please enter a valid number, a for all, or q to quit')
 
 
-def save_single_lexeme(cfg: argparse.Namespace, client: OpenAI, item: LexemeExtractionResponse.Item, idx: int) -> bool:
+async def save_single_lexeme(
+    cfg: argparse.Namespace, client: AsyncOpenAI, item: LexemeExtractionResponse.Item, idx: int
+) -> bool:
     """Save a single lexeme. Returns False if user wants to quit."""
     CON.print()
     lexeme_text = item.lexeme.strip()
-    tr = translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
+    tr = await translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
     card = Card(
         lexeme=tr.lexeme,
         translations=tr.translations,
@@ -494,20 +497,22 @@ def save_single_lexeme(cfg: argparse.Namespace, client: OpenAI, item: LexemeExtr
             proceed = True
             if len(db_card.example) > 0:
                 previous_examples += db_card.example
-            make_example(cfg, db_card, previous_examples)
+            await make_example(cfg, client, db_card, previous_examples)
     return True
 
 
-def save_extracted_lexemes(cfg: argparse.Namespace, client: OpenAI, items: list[LexemeExtractionResponse.Item]) -> None:
+async def save_extracted_lexemes(
+    cfg: argparse.Namespace, client: AsyncOpenAI, items: list[LexemeExtractionResponse.Item]
+) -> None:
     if len(items) == 1:
-        save_single_lexeme(cfg, client, items[0], 0)
+        await save_single_lexeme(cfg, client, items[0], 0)
         return
     while True:
         indices = prompt_card_selection(items)
         if not indices:
             return
         for idx in indices:
-            if not save_single_lexeme(cfg, client, items[idx], idx):
+            if not await save_single_lexeme(cfg, client, items[idx], idx):
                 return
 
 
@@ -525,7 +530,7 @@ def read_interactively() -> str:
     return session.prompt('Ctrl-D> ', multiline=True, prompt_continuation=cont, key_bindings=kb)
 
 
-def work() -> int:
+async def work() -> int:
     parser = get_parser(sections=[Sections.DB, Sections.VERNA, Sections.AI], require_db=False)
     parser.add_argument('query', nargs='*')
     cfg = parser.parse_args()
@@ -546,8 +551,8 @@ def work() -> int:
     if not query:
         raise no_query_error
 
-    client = OpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
-    lang_data = detect_language(cfg, client, query)
+    client = AsyncOpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
+    lang_data = await detect_language(cfg, client, query)
     print_identified_language(lang_data)
 
     if lang_data.language == Language.OTHER:
@@ -557,40 +562,37 @@ def work() -> int:
     if lang_data.language == Language.ENGLISH and len(query.split()) == 1:
         item = LexemeExtractionResponse.Item(lexeme=query, example=None, cefr=CefrLevel.C2)
         if sys.stdin.isatty() and cfg.db_conn_string:
-            save_single_lexeme(cfg, client, item, 0)
+            await save_single_lexeme(cfg, client, item, 0)
         else:
-            tr = translate_lexeme(cfg, client, lexeme_text=query)
+            tr = await translate_lexeme(cfg, client, lexeme_text=query)
             card = Card(lexeme=tr.lexeme, translations=tr.translations, example=None)
             db_card = to_db_card(card)
             CON.print(db_types.format_card(db_card, 1), markup=False)
         return 0
 
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        translation_future = executor.submit(
-            translate_text, cfg, client, query=query, source_language=lang_data.language
-        )
-        if lang_data.language == Language.ENGLISH:
-            lexeme_future = executor.submit(extract_lexemes, cfg, client, query=query)
-        translation_data = translation_future.result()
-        print_translation(translation_data)
-        print_typo_note(translation_data.typo_note)
-        if lang_data.language == Language.ENGLISH:
-            lexeme_data = lexeme_future.result()
-            lexeme_items = [item for item in lexeme_data.items if item.cefr >= cfg.level]
-            print_extracted_lexemes(lexeme_items)
-        else:
-            lexeme_items = None
+    translation_task = asyncio.create_task(translate_text(cfg, client, query=query, source_language=lang_data.language))
+    if lang_data.language == Language.ENGLISH:
+        lexeme_task = asyncio.create_task(extract_lexemes(cfg, client, query=query))
+    translation_data = await translation_task
+    print_translation(translation_data)
+    print_typo_note(translation_data.typo_note)
+    if lang_data.language == Language.ENGLISH:
+        lexeme_data = await lexeme_task
+        lexeme_items = [item for item in lexeme_data.items if item.cefr >= cfg.level]
+        print_extracted_lexemes(lexeme_items)
+    else:
+        lexeme_items = None
 
     if sys.stdin.isatty() and cfg.db_conn_string and lexeme_items:
         CON.print('SAVING CARDS', style='bold underline')
         CON.print()
-        save_extracted_lexemes(cfg, client, lexeme_items)
+        await save_extracted_lexemes(cfg, client, lexeme_items)
     return 0
 
 
 def main() -> int:
     try:
-        return work()
+        return asyncio.run(work())
     except KeyboardInterrupt:
         return 0
 
