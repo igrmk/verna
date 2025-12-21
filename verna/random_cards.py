@@ -83,7 +83,7 @@ def main() -> None:
     for idx, card in enumerate(cards, 1):
         CON.print()
         card_text = db_types.format_card(card, idx)
-        CON.print(card_text, markup=False)
+        CON.print(card_text, markup=False, highlight=False)
         tg_card_messages.append(card_text.plain)
 
     client = OpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)

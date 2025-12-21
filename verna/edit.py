@@ -24,6 +24,7 @@ from prompt_toolkit.styles import Style
 
 from verna.config import get_parser, Sections, print_config
 from verna.db_types import Card
+from verna import styles
 
 from typing import Callable
 
@@ -645,23 +646,7 @@ class CardEditor:
 
         self.message_control = FormattedTextControl(text=lambda: self.message)
 
-        self.style = Style.from_dict(
-            {
-                'frame.border': 'fg:ansibrightblack',
-                'frame.label': 'fg:ansiwhite',
-                'frame-focused frame.border': 'fg:ansiblue',
-                'frame-focused frame.label': 'fg:ansiblue bold reverse',
-                'selected': 'reverse',
-                'selected-unfocused': 'fg:ansiblack bg:ansibrightblack',
-                'lexeme': 'bold fg:ansigreen',
-                'lexeme-dim': 'fg:ansigreen',
-                'dim': 'fg:ansibrightblack',
-                'label': 'fg:ansicyan',
-                'label-selected': 'fg:ansicyan bold reverse',
-                'field-editing': 'bg:#252525',
-                'dialog frame.border': 'fg:ansiblue',
-            }
-        )
+        self.style = Style.from_dict(styles.PT_STYLES)
 
     def _start_editing(self, card_id: int, card: Card) -> None:
         self.editor_panel.start_editing(card_id, card)

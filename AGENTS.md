@@ -25,6 +25,7 @@ verna/
 ├── config.py         # CLI argument parsing and configuration
 ├── db.py             # Database operations for cards table
 ├── db_types.py       # Database card dataclass and formatting
+├── styles.py         # Rich and prompt_toolkit styles
 ├── migrator.py       # Database migration runner
 ├── create_spec.py    # DigitalOcean App Platform spec generator
 ├── verna.ini         # Default configuration file

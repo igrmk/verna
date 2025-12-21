@@ -16,6 +16,7 @@ from prompt_toolkit.key_binding import KeyBindings
 
 from verna.upper_str_enum import UpperStrEnum
 from verna.config import get_parser, Sections, print_config, ReasoningLevel, CefrLevel
+from verna import styles
 
 from rich.console import Console
 
@@ -93,16 +94,16 @@ async def _responses_parse(
 ):
     model_id = model or cfg.model
     if cfg.debug:
-        CON.print(step, style='underline dim')
+        CON.print(step, style=styles.DEBUG_STEP)
         CON.print()
-        CON.print('USER INPUT:', style='dim')
-        CON.print(user_input, style='dim')
+        CON.print('USER INPUT:', style=styles.DEBUG)
+        CON.print(user_input, style=styles.DEBUG)
         CON.print()
-        CON.print('SCHEMA:', style='dim')
+        CON.print('SCHEMA:', style=styles.DEBUG)
         schema = text_format.model_json_schema()
-        CON.print(json.dumps(schema, indent=2), style='dim')
+        CON.print(json.dumps(schema, indent=2), style=styles.DEBUG)
         CON.print()
-        CON.print(f'INSTRUCTIONS:\n{instructions}\n', style='dim')
+        CON.print(f'INSTRUCTIONS:\n{instructions}\n', style=styles.DEBUG)
 
     input_messages: ResponseInputParam = [
         {'role': 'system', 'content': instructions},
@@ -123,7 +124,7 @@ async def _responses_parse(
             )
             break
         except APITimeoutError:
-            CON.print(f'[{step}] Request timed out after {TIMEOUT}s', style='yellow')
+            CON.print(f'[{step}] Request timed out after {TIMEOUT}s', style=styles.WARNING)
             try:
                 ans = input('Retry? [Y/n] ').strip().lower()
             except (EOFError, KeyboardInterrupt):
@@ -133,7 +134,7 @@ async def _responses_parse(
             raise SystemExit('Request timed out')
 
     elapsed = time.perf_counter() - start_time
-    CON.print(f'[{step}] {model_id} responded in {elapsed:.1f}s', style='dim grey50')
+    CON.print(f'[{step}] {model_id} responded in {elapsed:.1f}s', style=styles.LOG, highlight=False)
 
     if resp.output_parsed is None:
         raise SystemExit(f'AI response could not be parsed ({step})')
@@ -322,13 +323,13 @@ def print_typo_note(typo_note: str | None) -> None:
     if not typo_note:
         return
     CON.print()
-    CON.print('TYPO NOTE', style='bold')
+    CON.print('TYPO NOTE', style=styles.NOTE_HEADER)
     CON.print(typo_note)
 
 
 def print_translation(translation_data: TranslationResponse) -> None:
     if translation_data.rp:
-        CON.print(f'/{translation_data.rp}/', style='italic')
+        CON.print(f'/{translation_data.rp}/', style=styles.TRANSCRIPTION)
         CON.print()
     CON.print(translation_data.translation, markup=False)
     CON.print()
@@ -338,12 +339,14 @@ def print_extracted_lexemes(items: list[LexemeExtractionResponse.Item]) -> None:
     if not items:
         CON.print('No lexemes for memorisation found')
         return
-    CON.print('LEXEMES', style='bold underline')
+    header = '▶ LEXEMES'
+    CON.print(header, style=styles.SECTION_HEADER)
+    CON.print('─' * len(header), style=styles.SECTION_HEADER)
     CON.print()
     for idx, item in enumerate(items, 1):
-        CON.print(f'[{idx}] {item.lexeme} ({item.cefr})', style='bold')
+        CON.print(f'[{idx}] {item.lexeme} ({item.cefr})', style=styles.LEXEME_HEADER, highlight=False)
         if item.example:
-            CON.print(f'  > {item.example}', style='italic')
+            CON.print(f'  > {item.example}', style=styles.EXAMPLE)
         CON.print()
 
 
@@ -446,7 +449,7 @@ async def save_single_lexeme(
     proceed = True
     while proceed:
         proceed = False
-        CON.print(db_types.format_card(db_card, idx + 1), markup=False)
+        CON.print(db_types.format_card(db_card, idx + 1), markup=False, highlight=False)
         CON.print()
         res = confirm('Save?')
         CON.print()
@@ -528,7 +531,7 @@ async def work() -> int:
             tr = await translate_lexeme(cfg, client, lexeme_text=query)
             card = Card(lexeme=tr.lexeme, translations=tr.translations, example=None)
             db_card = to_db_card(card)
-            CON.print(db_types.format_card(db_card, 1), markup=False)
+            CON.print(db_types.format_card(db_card, 1), markup=False, highlight=False)
         return 0
 
     translation_task = asyncio.create_task(translate_text(cfg, client, query=query, source_language=lang_data.language))
@@ -545,7 +548,9 @@ async def work() -> int:
         lexeme_items = None
 
     if sys.stdin.isatty() and cfg.db_conn_string and lexeme_items:
-        CON.print('SAVING CARDS', style='bold underline')
+        header = '▶ SAVING CARDS'
+        CON.print(header, style=styles.SECTION_HEADER)
+        CON.print('─' * len(header), style=styles.SECTION_HEADER)
         CON.print()
         await save_extracted_lexemes(cfg, client, lexeme_items)
     return 0
