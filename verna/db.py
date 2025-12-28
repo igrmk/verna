@@ -12,11 +12,13 @@ def save_card(conn: Connection, card: Card) -> bool:
                 lexeme,
                 rp,
                 past_simple,
+                past_simple_rp,
                 past_participle,
+                past_participle_rp,
                 translations,
                 example
             )
-            values (%s, %s, %s, %s, %s, %s)
+            values (%s, %s, %s, %s, %s, %s, %s, %s)
             on conflict (lower(lexeme)) do update set
                 translations = (
                     select coalesce(array_agg(distinct x), '{}')
@@ -25,6 +27,16 @@ def save_card(conn: Connection, card: Card) -> bool:
                 rp = (
                     select coalesce(array_agg(distinct x), '{}')
                     from unnest(cards.rp || excluded.rp) as x
+                ),
+                past_simple = coalesce(cards.past_simple, excluded.past_simple),
+                past_simple_rp = (
+                    select coalesce(array_agg(distinct x), '{}')
+                    from unnest(cards.past_simple_rp || excluded.past_simple_rp) as x
+                ),
+                past_participle = coalesce(cards.past_participle, excluded.past_participle),
+                past_participle_rp = (
+                    select coalesce(array_agg(distinct x), '{}')
+                    from unnest(cards.past_participle_rp || excluded.past_participle_rp) as x
                 ),
                 example = (
                     select coalesce(array_agg(distinct x), '{}')
@@ -36,7 +48,9 @@ def save_card(conn: Connection, card: Card) -> bool:
                 card.lexeme,
                 card.rp,
                 card.past_simple,
+                card.past_simple_rp,
                 card.past_participle,
+                card.past_participle_rp,
                 card.translations,
                 card.example,
             ),
@@ -57,7 +71,9 @@ def update_card(conn: Connection, card_id: int, card: Card) -> None:
                 lexeme = %s,
                 rp = %s,
                 past_simple = %s,
+                past_simple_rp = %s,
                 past_participle = %s,
+                past_participle_rp = %s,
                 translations = %s,
                 example = %s
             where id = %s
@@ -66,7 +82,9 @@ def update_card(conn: Connection, card_id: int, card: Card) -> None:
                 card.lexeme,
                 card.rp,
                 card.past_simple,
+                card.past_simple_rp,
                 card.past_participle,
+                card.past_participle_rp,
                 card.translations,
                 card.example,
                 card_id,
@@ -88,7 +106,16 @@ def search_cards(conn: Connection, query: str, limit: int = 50) -> list[tuple[in
         if query:
             cur.execute(
                 """
-                select id, lexeme, rp, past_simple, past_participle, translations, example
+                select
+                    id,
+                    lexeme,
+                    rp,
+                    past_simple,
+                    past_simple_rp,
+                    past_participle,
+                    past_participle_rp,
+                    translations,
+                    example
                 from cards
                 where lexeme ilike %s
                 order by lexeme
@@ -99,7 +126,16 @@ def search_cards(conn: Connection, query: str, limit: int = 50) -> list[tuple[in
         else:
             cur.execute(
                 """
-                select id, lexeme, rp, past_simple, past_participle, translations, example
+                select
+                    id,
+                    lexeme,
+                    rp,
+                    past_simple,
+                    past_simple_rp,
+                    past_participle,
+                    past_participle_rp,
+                    translations,
+                    example
                 from cards
                 order by lexeme
                 limit %s
@@ -115,9 +151,11 @@ def search_cards(conn: Connection, query: str, limit: int = 50) -> list[tuple[in
                 lexeme=row[1],
                 rp=row[2] or [],
                 past_simple=row[3],
-                past_participle=row[4],
-                translations=row[5] or [],
-                example=row[6] or [],
+                past_simple_rp=row[4] or [],
+                past_participle=row[5],
+                past_participle_rp=row[6] or [],
+                translations=row[7] or [],
+                example=row[8] or [],
             ),
         )
         for row in rows
@@ -129,7 +167,15 @@ def fetch_random_cards(conn: Connection, limit: int) -> list[Card]:
     with conn.cursor() as cur:
         cur.execute(
             """
-            select lexeme, rp, past_simple, past_participle, translations, example
+            select
+                lexeme,
+                rp,
+                past_simple,
+                past_simple_rp,
+                past_participle,
+                past_participle_rp,
+                translations,
+                example
             from cards
             order by random()
             limit %s;
@@ -140,11 +186,13 @@ def fetch_random_cards(conn: Connection, limit: int) -> list[Card]:
         return [
             Card(
                 lexeme=row[0],
-                rp=row[1],
+                rp=row[1] or [],
                 past_simple=row[2],
-                past_participle=row[3],
-                translations=row[4],
-                example=row[5],
+                past_simple_rp=row[3] or [],
+                past_participle=row[4],
+                past_participle_rp=row[5] or [],
+                translations=row[6] or [],
+                example=row[7] or [],
             )
             for row in rows
         ]

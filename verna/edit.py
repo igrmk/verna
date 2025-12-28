@@ -315,7 +315,7 @@ class ResultsPanel:
 
 
 class EditorPanel:
-    SINGLE_LINE_FIELD_COUNT = 4  # lexeme, rp, past_simple, past_participle
+    SINGLE_LINE_FIELD_COUNT = 6  # lexeme, rp, past_simple, past_simple_rp, past_participle, past_participle_rp
 
     def __init__(
         self,
@@ -340,7 +340,9 @@ class EditorPanel:
         self.field_lexeme = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
         self.field_rp = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
         self.field_past_simple = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
+        self.field_past_simple_rp = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
         self.field_past_participle = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
+        self.field_past_participle_rp = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
         self.field_translations = TextArea(
             height=Dimension(min=1),
             multiline=True,
@@ -360,7 +362,9 @@ class EditorPanel:
             ('Lexeme', self.field_lexeme),
             ('RP', self.field_rp),
             ('Past simple', self.field_past_simple),
+            ('Past simple RP', self.field_past_simple_rp),
             ('Past participle', self.field_past_participle),
+            ('Past part. RP', self.field_past_participle_rp),
             ('Translations', self.field_translations),
             ('Example', self.field_example),
         ]
@@ -400,17 +404,27 @@ class EditorPanel:
         self.field_lexeme.text = card.lexeme
         self.field_rp.text = ', '.join(card.rp)
         self.field_past_simple.text = card.past_simple or ''
+        self.field_past_simple_rp.text = ', '.join(card.past_simple_rp)
         self.field_past_participle.text = card.past_participle or ''
+        self.field_past_participle_rp.text = ', '.join(card.past_participle_rp)
         self.field_translations.text = '\n'.join(card.translations)
         self.field_example.text = '\n'.join(card.example)
 
     def _form_to_card(self) -> Card:
         rp_text = self.field_rp.text.strip()
+        past_simple_rp_text = self.field_past_simple_rp.text.strip()
+        past_participle_rp_text = self.field_past_participle_rp.text.strip()
         return Card(
             lexeme=self.field_lexeme.text.strip(),
             rp=[x.strip() for x in rp_text.split(',') if x.strip()] if rp_text else [],
             past_simple=self.field_past_simple.text.strip() or None,
+            past_simple_rp=[x.strip() for x in past_simple_rp_text.split(',') if x.strip()]
+            if past_simple_rp_text
+            else [],
             past_participle=self.field_past_participle.text.strip() or None,
+            past_participle_rp=[x.strip() for x in past_participle_rp_text.split(',') if x.strip()]
+            if past_participle_rp_text
+            else [],
             translations=[x.strip() for x in self.field_translations.text.split('\n') if x.strip()],
             example=[x.strip() for x in self.field_example.text.split('\n') if x.strip()],
         )
@@ -424,7 +438,9 @@ class EditorPanel:
             current.lexeme != orig.lexeme
             or current.rp != orig.rp
             or current.past_simple != orig.past_simple
+            or current.past_simple_rp != orig.past_simple_rp
             or current.past_participle != orig.past_participle
+            or current.past_participle_rp != orig.past_participle_rp
             or current.translations != orig.translations
             or current.example != orig.example
         )
@@ -560,9 +576,9 @@ class EditorPanel:
         form_rows: list[Container] = [self.form_nav_window]
         for idx, (label, field) in enumerate(self.form_fields):
             form_rows.append(self._create_form_row(idx, label, field))
-            if idx == 3:  # After past_participle
+            if idx == 5:  # After past_participle_rp
                 form_rows.append(Window(height=1))
-            if idx == 4:  # After translations
+            if idx == 6:  # After translations
                 form_rows.append(Window(height=1))
 
         form = VSplit(

@@ -37,11 +37,15 @@ class Language(UpperStrEnum):
     OTHER = auto()
 
 
-class Lexeme(BaseModel):
+class Form(BaseModel):
     text: str
     rp: list[str] = Field(default_factory=list)
-    past_simple: str | None = None
-    past_participle: str | None = None
+
+
+class Lexeme(BaseModel):
+    base: Form
+    past_simple: Form | None = None
+    past_participle: Form | None = None
 
 
 class Card(BaseModel):
@@ -270,9 +274,8 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
         {% endif %}
         First, normalise it to its base form (use plural if it is the standard form for the meaning in the sentence)
         and fill the `lexeme` object:
-          - `text` — required; the lexeme in its base form
-          - `rp` — list of possible British RP transcriptions of L, without slashes
-          - `past_simple` and `past_participle` — only if L is an irregular verb
+          - `base` — required; Form with `text` (lexeme in base form) and `rp` (transcriptions without slashes)
+          - `past_simple` and `past_participle` — only if L is an irregular verb; same Form structure
 
         Then translate it to Russian and fill
         `translations` — exhaustive list of Russian translations covering all parts of speech
@@ -367,10 +370,12 @@ def confirm(prompt: str) -> ConfirmResult:
 
 def to_db_card(card) -> db_types.Card:
     return db_types.Card(
-        lexeme=card.lexeme.text.strip(),
-        rp=card.lexeme.rp,
-        past_simple=card.lexeme.past_simple,
-        past_participle=card.lexeme.past_participle,
+        lexeme=card.lexeme.base.text.strip(),
+        rp=card.lexeme.base.rp,
+        past_simple=card.lexeme.past_simple.text if card.lexeme.past_simple else None,
+        past_simple_rp=card.lexeme.past_simple.rp if card.lexeme.past_simple else [],
+        past_participle=card.lexeme.past_participle.text if card.lexeme.past_participle else None,
+        past_participle_rp=card.lexeme.past_participle.rp if card.lexeme.past_participle else [],
         translations=[t.strip() for t in card.translations],
         example=[card.example] if card.example is not None else [],
     )
@@ -425,7 +430,7 @@ class LexemeSelector:
             if item.example:
                 lines.append(('class:example', f'\n     > {item.example}'))
             lines.append(('', '\n\n'))
-        lines.append(('class:dim', '↑/↓/j/k: navigate | Enter/1-9: select | a: all | q: quit'))
+        lines.append(('class:dim', '↑/↓/j/k: navigate | Enter/1-9: select | a: all | Esc: quit'))
         return lines
 
     def _create_key_bindings(self) -> KeyBindings:
@@ -453,7 +458,6 @@ class LexemeSelector:
             self.result = SelectionResult.ALL
             event.app.exit()
 
-        @kb.add('q')
         @kb.add('escape')
         def _quit(event):
             self.result = SelectionResult.QUIT

@@ -59,16 +59,18 @@ Configuration is loaded from (in order of precedence):
 
 The `cards` table stores vocabulary cards:
 
-| Column            | Type        | Description                                |
-|-------------------|-------------|--------------------------------------------|
-| `id`              | bigserial   | Primary key                                |
-| `created_at`      | timestamptz | Creation timestamp                         |
-| `lexeme`          | text        | The word/phrase (unique, case-insensitive) |
-| `rp`              | text[]      | British RP transcriptions                  |
-| `past_simple`     | text        | Irregular verb past simple form            |
-| `past_participle` | text        | Irregular verb past participle             |
-| `translations`    | text[]      | Russian translations                       |
-| `example`         | text[]      | Example sentences                          |
+| Column              | Type        | Description                                |
+|---------------------|-------------|--------------------------------------------|
+| `id`                | bigserial   | Primary key                                |
+| `created_at`        | timestamptz | Creation timestamp                         |
+| `lexeme`            | text        | The word/phrase (unique, case-insensitive) |
+| `rp`                | text[]      | British RP transcriptions                  |
+| `past_simple`       | text        | Irregular verb past simple form            |
+| `past_simple_rp`    | text[]      | Past simple RP transcriptions              |
+| `past_participle`   | text        | Irregular verb past participle             |
+| `past_participle_rp`| text[]      | Past participle RP transcriptions          |
+| `translations`      | text[]      | Russian translations                       |
+| `example`           | text[]      | Example sentences                          |
 
 Run migrations with: `python -m verna.migrator`
 
@@ -94,6 +96,7 @@ Run migrations with: `python -m verna.migrator`
 - Line length: 120 characters
 - Quote style: single quotes (') or triple double quotes (""")
 - Type hints: Python 3.12+ style (`list[str]`, `str | None`)
+- SQL: if select columns don't fit on a single line, put each column on a new line
 
 ## Commits
 
