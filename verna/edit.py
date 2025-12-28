@@ -524,8 +524,8 @@ class EditorPanel:
             event.app.layout.focus(self.form_nav_window)
 
         @kb.add('enter', filter=in_form_editing & in_single_line_field)
-        def _form_save_from_field(event):
-            self._save_and_exit()
+        def _form_exit_single_line_field(event):
+            event.app.layout.focus(self.form_nav_window)
 
         @kb.add('tab', filter=in_form_editing)
         def _form_next_while_editing(event):
@@ -689,7 +689,7 @@ class CardEditor:
 
     def _get_help_text(self) -> str:
         if self.editor_panel._in_any_form_field():
-            return 'Esc: exit field | Enter: save (single-line) | Tab/S-Tab: next/prev'
+            return 'Esc/Enter: exit field | Tab/S-Tab: next/prev'
         if self.editor_panel.show_save_dialog:
             return '(y) Save | (n) Discard | Esc: back'
         if self.editor_panel._in_form_nav():
