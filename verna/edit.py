@@ -183,7 +183,7 @@ class ResultsPanel:
             line += self._count_card_lines(card)
         return 0
 
-    def _get_results_text(self):
+    def _get_results_text(self) -> list[tuple[str, str]]:
         if not self.cards:
             return [('class:dim', 'No results.')]
 

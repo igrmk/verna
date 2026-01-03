@@ -36,7 +36,7 @@ def format_card(card: Card, *, focused: bool = True, indent: int = 0) -> list[tu
                 parts.append(('class:transcription', rp))
                 parts.append(('', '/'))
         if card.past_participle:
-            parts.append(('', ' / ' if card.past_simple else ' '))
+            parts.append(('', ' | ' if card.past_simple else ' '))
             parts.append(('', card.past_participle))
             for rp in card.past_participle_rp:
                 parts.append(('', ' /'))
@@ -68,7 +68,7 @@ def format_card_plain(card: Card) -> str:
             for rp in card.past_simple_rp:
                 line += f' /{rp}/'
         if card.past_participle:
-            line += ' / ' if card.past_simple else ' '
+            line += ' | ' if card.past_simple else ' '
             line += card.past_participle
             for rp in card.past_participle_rp:
                 line += f' /{rp}/'
