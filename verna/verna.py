@@ -280,6 +280,8 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
         Then translate it to Russian and fill
         `translations` — exhaustive list of Russian translations covering all parts of speech
         (nouns, verbs, adjectives, adverbs, etc.) but avoiding very close synonyms.
+        Each item must be a single translation, not multiple translations separated by semicolons.
+        Do not include part-of-speech labels like (verb), (noun), etc.
         {% if example %}
         Ensure to include a translation matching the lexeme's meaning from this example (but not only).
         {% endif %}
