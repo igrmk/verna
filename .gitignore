@@ -6,3 +6,4 @@ __pycache__/
 /verna.egg-info/
 /.do/app.yaml
 /.idea/
+**/.claude/settings.local.json
