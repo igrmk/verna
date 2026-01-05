@@ -1,6 +1,6 @@
 import sys
 import psycopg
-from prompt_toolkit import Application
+from prompt_toolkit.application import Application
 from verna import db
 from prompt_toolkit.filters import Condition, has_focus
 from prompt_toolkit.key_binding import KeyBindings, KeyBindingsBase, merge_key_bindings
@@ -11,7 +11,6 @@ from prompt_toolkit.layout import (
     VSplit,
     Window,
     FormattedTextControl,
-    ScrollablePane,
     ConditionalContainer,
     Float,
     FloatContainer,
@@ -120,6 +119,7 @@ class ResultsPanel:
         self.cards: list[tuple[int, Card]] = []
         self.selected_idx = 0
         self.show_delete_dialog = False
+        self._moved_down = False
 
         self.results_control = FormattedTextControl(
             text=self._get_results_text,
@@ -144,6 +144,7 @@ class ResultsPanel:
     def set_cards(self, cards: list[tuple[int, Card]]) -> None:
         self.cards = cards
         self.selected_idx = 0
+        self._moved_down = False
 
     def update_card(self, card_id: int, card: Card) -> None:
         for i, (cid, _) in enumerate(self.cards):
@@ -166,7 +167,7 @@ class ResultsPanel:
 
     def _count_card_lines(self, card: Card) -> int:
         lines = 1  # lexeme line
-        if card.past_simple:
+        if card.past_simple or card.past_participle:
             lines += 1  # past tense line
         lines += len(card.translations)
         lines += len(card.example)
@@ -178,9 +179,12 @@ class ResultsPanel:
             return 0
         line = 0
         for idx, (_, card) in enumerate(self.cards):
+            card_lines = self._count_card_lines(card)
             if idx == self.selected_idx:
-                return line
-            line += self._count_card_lines(card)
+                if self._moved_down:
+                    return line + card_lines - 1  # show end of card when moving down
+                return line  # show start of card when moving up
+            line += card_lines
         return 0
 
     def _get_results_text(self) -> list[tuple[str, str]]:
@@ -218,12 +222,14 @@ class ResultsPanel:
         def _up(event):
             if self.selected_idx > 0:
                 self.selected_idx -= 1
+                self._moved_down = False
 
         @kb.add('down', filter=in_results & ~in_delete_dialog)
         @kb.add('j', filter=in_results & ~in_delete_dialog)
         def _down(event):
             if self.selected_idx < len(self.cards) - 1:
                 self.selected_idx += 1
+                self._moved_down = True
 
         @kb.add('enter', filter=in_results & ~in_delete_dialog)
         def _start_edit(event):
@@ -266,7 +272,7 @@ class ResultsPanel:
         results_pane = VSplit(
             [
                 Window(width=1),
-                ScrollablePane(self.results_window),
+                self.results_window,
                 Window(width=1),
             ]
         )

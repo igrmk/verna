@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field
 from prompt_toolkit import PromptSession
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.layout import Layout, HSplit, Window, FormattedTextControl
+from prompt_toolkit.data_structures import Point
+from prompt_toolkit.layout import Layout, HSplit, Window, FormattedTextControl, ScrollablePane
 from prompt_toolkit.styles import Style
 
 from verna.upper_str_enum import UpperStrEnum
@@ -421,6 +422,7 @@ class LexemeSelector:
         self.items = items
         self.selected_idx = 0
         self.result: SelectionResult = SelectionResult.QUIT
+        self._moved_down = False
 
     def _get_formatted_text(self) -> list[tuple[str, str]]:
         lines: list[tuple[str, str]] = []
@@ -435,6 +437,24 @@ class LexemeSelector:
         lines.append(('class:dim', '↑/↓/j/k: navigate | Enter/1-9: select | a: all | Esc: quit'))
         return lines
 
+    def _count_item_lines(self, item: LexemeExtractionResponse.Item) -> int:
+        lines = 1  # lexeme line
+        if item.example:
+            lines += 1  # example line
+        lines += 1  # separator
+        return lines
+
+    def _get_selected_line(self) -> int:
+        line = 0
+        for idx, item in enumerate(self.items):
+            item_lines = self._count_item_lines(item)
+            if idx == self.selected_idx:
+                if self._moved_down:
+                    return line + item_lines - 1  # show end of item when moving down
+                return line  # show start of item when moving up
+            line += item_lines
+        return 0
+
     def _create_key_bindings(self) -> KeyBindings:
         kb = KeyBindings()
 
@@ -443,12 +463,14 @@ class LexemeSelector:
         def _up(event):
             if self.selected_idx > 0:
                 self.selected_idx -= 1
+                self._moved_down = False
 
         @kb.add('down')
         @kb.add('j')
         def _down(event):
             if self.selected_idx < len(self.items) - 1:
                 self.selected_idx += 1
+                self._moved_down = True
 
         @kb.add('enter')
         def _select(event):
@@ -477,13 +499,13 @@ class LexemeSelector:
         return kb
 
     async def run(self) -> tuple[SelectionResult, int]:
-        layout = Layout(
-            HSplit(
-                [
-                    Window(FormattedTextControl(self._get_formatted_text, show_cursor=False), wrap_lines=True),
-                ]
-            )
+        control = FormattedTextControl(
+            self._get_formatted_text,
+            show_cursor=False,
+            get_cursor_position=lambda: Point(0, self._get_selected_line()),
         )
+        window = Window(control, wrap_lines=True, height=30)
+        layout = Layout(HSplit([ScrollablePane(window)]))
         style = Style.from_dict(styles.PT_STYLES)
         app: Application = Application(
             layout=layout,
