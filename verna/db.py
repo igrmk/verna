@@ -23,29 +23,24 @@ def save_card(conn: Connection, card: Card) -> bool:
                 translations = (
                     select coalesce(array_agg(distinct x), '{}')
                     from unnest(cards.translations || excluded.translations) as x
-                    where x is not null
                 ),
                 rp = (
                     select coalesce(array_agg(distinct x), '{}')
                     from unnest(cards.rp || excluded.rp) as x
-                    where x is not null
                 ),
                 past_simple = coalesce(cards.past_simple, excluded.past_simple),
                 past_simple_rp = (
                     select coalesce(array_agg(distinct x), '{}')
                     from unnest(cards.past_simple_rp || excluded.past_simple_rp) as x
-                    where x is not null
                 ),
                 past_participle = coalesce(cards.past_participle, excluded.past_participle),
                 past_participle_rp = (
                     select coalesce(array_agg(distinct x), '{}')
                     from unnest(cards.past_participle_rp || excluded.past_participle_rp) as x
-                    where x is not null
                 ),
                 example = (
                     select coalesce(array_agg(distinct x), '{}')
                     from unnest(cards.example || excluded.example) as x
-                    where x is not null
                 )
             returning (xmax = 0) as inserted;
             """,

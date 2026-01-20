@@ -44,14 +44,10 @@ def format_card(card: Card, *, focused: bool = True, indent: int = 0) -> list[tu
                 parts.append(('', '/'))
 
     for x in card.translations:
-        if x is None:
-            continue
         parts.append(('', f'\n{pad}• '))
         parts.append(('', x))
 
     for s in card.example:
-        if s is None:
-            continue
         parts.append(('', f'\n{pad}> '))
         parts.append(('class:example', s))
 
