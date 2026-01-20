@@ -514,9 +514,12 @@ class EditorPanel:
             self.show_save_dialog = False
 
         @kb.add('n', filter=in_form_nav & in_save_dialog)
-        @kb.add('escape', filter=in_form_nav & in_save_dialog)
-        def _cancel_save(event):
+        def _discard_save(event):
             self._cancel_and_exit()
+            self.show_save_dialog = False
+
+        @kb.add('escape', filter=in_form_nav & in_save_dialog)
+        def _back_to_editing(event):
             self.show_save_dialog = False
 
         # Form editing mode (actual TextArea focused)
