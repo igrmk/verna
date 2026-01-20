@@ -96,7 +96,7 @@ Run migrations with: `python -m verna.migrator`
 - Line length: 120 characters
 - Quote style: single quotes (') or triple double quotes (""")
 - Type hints: Python 3.12+ style (`list[str]`, `str | None`)
-- SQL: if select columns don't fit on a single line, put each column on a new line
+- SQL: lowercase keywords, if select columns don't fit on a single line, put each column on a new line
 - Markdown prose: max 100 chars per line, break at logical phrase boundaries
 
 ## Commits
