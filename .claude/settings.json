@@ -9,6 +9,16 @@
       "Read(./verna.egg-info/**)",
       "Read(./.do/app.yaml)",
       "Read(./.idea/**)"
+    ],
+    "allow": [
+      "Edit",
+      "Write",
+      "Bash(python -m py_compile:*)",
+      "Bash(python -m verna.create_spec:*)",
+      "Bash(ruff check:*)",
+      "Bash(ruff format:*)",
+      "Bash(mypy:*)",
+      "WebSearch"
     ]
   }
 }
