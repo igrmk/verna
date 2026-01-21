@@ -10,6 +10,7 @@ PT_STYLES = {
     'debug-step': 'underline fg:ansibrightblack',
     'card-label': 'fg:ansibrightblack',
     'warning': 'fg:ansiyellow',
+    'success': 'fg:ansigreen',
     'note-header': 'bold',
     'transcription': 'italic',
     # TUI editor styles

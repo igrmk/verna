@@ -12,7 +12,7 @@ from openai.types.responses import ResponseInputParam
 from openai.types.shared_params import Reasoning
 from pydantic import BaseModel, Field
 from prompt_toolkit import PromptSession
-from prompt_toolkit.application import Application
+from prompt_toolkit.application import Application, get_app
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.data_structures import Point
 from prompt_toolkit.layout import Layout, HSplit, Window, FormattedTextControl, ScrollablePane
@@ -354,21 +354,92 @@ class ConfirmResult(Enum):
     QUIT = auto()
 
 
-def confirm(prompt: str) -> ConfirmResult:
-    while True:
-        try:
-            ans = input(f'{prompt} [y/N/e/q] ').strip().lower()
-        except (EOFError, KeyboardInterrupt):
-            return ConfirmResult.NO
-        if ans == 'y':
-            return ConfirmResult.YES
-        if ans in ('n', ''):
-            return ConfirmResult.NO
-        if ans == 'e':
-            return ConfirmResult.EXAMPLE
-        if ans == 'q':
-            return ConfirmResult.QUIT
-        console.print_styled('Please enter y, n, e, or q')
+class ConfirmSelector:
+    OPTIONS = [
+        (ConfirmResult.YES, 'Save', 'y'),
+        (ConfirmResult.EXAMPLE, 'Example', 'e'),
+        (ConfirmResult.NO, 'Skip', 'Esc'),
+        (ConfirmResult.QUIT, 'Quit', 'q'),
+    ]
+
+    def __init__(self):
+        self.selected_idx = 0
+        self.result = ConfirmResult.NO
+
+    def _get_formatted_text(self) -> list[tuple[str, str]]:
+        parts: list[tuple[str, str]] = []
+        for idx, (_, label, key) in enumerate(self.OPTIONS):
+            if idx > 0:
+                parts.append(('', '  '))
+            if idx == self.selected_idx:
+                parts.append(('class:selected', f' {label} '))
+            else:
+                parts.append(('class:dim', f' {label} '))
+            parts.append(('class:dim', f'({key})'))
+        return parts
+
+    def _create_key_bindings(self) -> KeyBindings:
+        kb = KeyBindings()
+
+        @kb.add('left')
+        @kb.add('h')
+        def _left(event):
+            if self.selected_idx > 0:
+                self.selected_idx -= 1
+
+        @kb.add('right')
+        @kb.add('l')
+        def _right(event):
+            if self.selected_idx < len(self.OPTIONS) - 1:
+                self.selected_idx += 1
+
+        @kb.add('enter')
+        def _select(event):
+            self.result = self.OPTIONS[self.selected_idx][0]
+            event.app.exit()
+
+        @kb.add('y')
+        def _yes(event):
+            self.result = ConfirmResult.YES
+            event.app.exit()
+
+        @kb.add('e')
+        def _example(event):
+            self.result = ConfirmResult.EXAMPLE
+            event.app.exit()
+
+        @kb.add('escape')
+        @kb.add('n')
+        def _no(event):
+            self.result = ConfirmResult.NO
+            event.app.exit()
+
+        @kb.add('q')
+        def _quit(event):
+            self.result = ConfirmResult.QUIT
+            event.app.exit()
+
+        return kb
+
+    async def run(self) -> ConfirmResult:
+        control = FormattedTextControl(self._get_formatted_text, show_cursor=False)
+        window = Window(control, height=1)
+        layout = Layout(window)
+        style = Style.from_dict(styles.PT_STYLES)
+        app: Application = Application(
+            layout=layout,
+            key_bindings=self._create_key_bindings(),
+            style=style,
+            full_screen=False,
+            erase_when_done=True,
+        )
+        await app.run_async()
+        return self.result
+
+
+async def confirm() -> ConfirmResult:
+    selector = ConfirmSelector()
+    return await selector.run()
 
 
 def to_db_card(card) -> db_types.Card:
@@ -400,12 +471,11 @@ async def make_example(
     card.example = [data.example] if data.example is not None else []
 
 
-def save_card(cfg: argparse.Namespace, card: db_types.Card) -> None:
+def save_card(cfg: argparse.Namespace, card: db_types.Card) -> bool:
+    """Save card to database. Returns True if inserted, False if merged."""
     try:
         with psycopg.connect(cfg.db_conn_string) as conn:
-            inserted = db.save_card(conn, card)
-            console.print_styled('Saved' if inserted else 'Merged')
-            console.print_styled()
+            return db.save_card(conn, card)
     except psycopg.Error as e:
         print(f'Failed to save cards to postgres: {e}', file=sys.stderr)
         sys.exit(2)
@@ -418,18 +488,27 @@ class SelectionResult(Enum):
 
 
 class LexemeSelector:
-    def __init__(self, items: list[LexemeExtractionResponse.Item]):
+    def __init__(
+        self, items: list[LexemeExtractionResponse.Item], selected_idx: int = 0, saved: set[int] | None = None
+    ):
         self.items = items
-        self.selected_idx = 0
+        self.selected_idx = min(selected_idx, len(items) - 1) if items else 0
         self.result: SelectionResult = SelectionResult.QUIT
         self._moved_down = False
+        self.saved = saved or set()
 
     def _get_formatted_text(self) -> list[tuple[str, str]]:
         lines: list[tuple[str, str]] = []
         for idx, item in enumerate(self.items):
             is_selected = idx == self.selected_idx
-            prefix = ' ▶ ' if is_selected else '   '
-            style = 'class:selected class:lexeme' if is_selected else 'class:lexeme-dim'
+            is_saved = idx in self.saved
+            if is_saved:
+                prefix = ' ✓ ' if not is_selected else ' ▶ '
+            else:
+                prefix = ' ▶ ' if is_selected else '   '
+            style = (
+                'class:selected class:lexeme' if is_selected else ('class:success' if is_saved else 'class:lexeme-dim')
+            )
             lines.append((style, f'{prefix}[{idx + 1}] {item.lexeme} ({item.cefr})'))
             if item.example:
                 lines.append(('class:example', f'\n     > {item.example}'))
@@ -512,18 +591,47 @@ class LexemeSelector:
             key_bindings=self._create_key_bindings(),
             style=style,
             full_screen=False,
+            erase_when_done=True,
         )
         await app.run_async()
         return self.result, self.selected_idx
 
 
+def _count_lines(parts: list[tuple[str, str]]) -> int:
+    """Count lines in formatted text parts."""
+    text = ''.join(p[1] for p in parts)
+    return text.count('\n') + 1
+
+
+async def show_status_while(message: str, coro):
+    """Show a status message while coroutine runs, then erase it."""
+    result = None
+
+    async def do_work():
+        nonlocal result
+        result = await coro
+        get_app().exit()
+
+    control = FormattedTextControl(lambda: [('class:dim', message)])
+    window = Window(control, height=1)
+    layout = Layout(window)
+    style = Style.from_dict(styles.PT_STYLES)
+    app: Application = Application(layout=layout, style=style, full_screen=False, erase_when_done=True)
+
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(do_work())
+        tg.create_task(app.run_async())
+
+    return result
+
+
 async def save_single_lexeme(
     cfg: argparse.Namespace, client: AsyncOpenAI, item: LexemeExtractionResponse.Item, idx: int
-) -> bool:
-    """Save a single lexeme. Returns False if user wants to quit."""
-    console.print_styled()
+) -> tuple[bool, bool]:
+    """Save a single lexeme. Returns (continue, saved) tuple."""
     lexeme_text = item.lexeme.strip()
-    tr = await translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
+    coro = translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
+    tr = await show_status_while(f'Translating "{lexeme_text}"...', coro)
     card = Card(
         lexeme=tr.lexeme,
         translations=tr.translations,
@@ -538,38 +646,75 @@ async def save_single_lexeme(
         parts = [('class:lexeme', f'[{idx + 1}] ')] + db_types.format_card(db_card, indent=2)
         console.print_formatted(parts)
         console.print_styled()
-        res = confirm('Save?')
-        console.print_styled()
+        res = await confirm()
+        # Count lines: card lines + 1 empty + 1 debug log (prompt erases itself)
+        lines_to_clear = _count_lines(parts) + 2
         if res == ConfirmResult.QUIT:
-            return False
+            console.clear_lines_above(lines_to_clear)
+            return False, False
         if res == ConfirmResult.YES:
             save_card(cfg, db_card)
+            console.clear_lines_above(lines_to_clear)
+            return True, True
+        if res == ConfirmResult.NO:
+            console.clear_lines_above(lines_to_clear)
+            return True, False
         if res == ConfirmResult.EXAMPLE:
+            console.clear_lines_above(lines_to_clear)
             proceed = True
             if len(db_card.example) > 0:
                 previous_examples += db_card.example
             await make_example(cfg, client, db_card, previous_examples)
-    return True
+    return True, False
 
 
 async def save_extracted_lexemes(
     cfg: argparse.Namespace, client: AsyncOpenAI, items: list[LexemeExtractionResponse.Item]
 ) -> None:
+    print_save_cards_header()
+    saved: set[int] = set()
+
     if len(items) == 1:
-        await save_single_lexeme(cfg, client, items[0], 0)
+        _, was_saved = await save_single_lexeme(cfg, client, items[0], 0)
+        if was_saved:
+            console.print_styled(f' ✓ [1] {items[0].lexeme}', style='class:success')
+        else:
+            console.print_styled(f'   [1] {items[0].lexeme}', style='class:lexeme-dim')
+        if items[0].example:
+            console.print_styled(f'     > {items[0].example}', style='class:example')
+        console.print_styled()
         return
+
+    selected_idx = 0
     while True:
-        selector = LexemeSelector(items)
+        selector = LexemeSelector(items, selected_idx, saved)
         result, idx = await selector.run()
+        selected_idx = idx
         if result == SelectionResult.QUIT:
+            # Print final state of the list
+            for i, item in enumerate(items):
+                if i in saved:
+                    console.print_styled(f' ✓ [{i + 1}] {item.lexeme}', style='class:success')
+                else:
+                    console.print_styled(f'   [{i + 1}] {item.lexeme}', style='class:lexeme-dim')
+                if item.example:
+                    console.print_styled(f'     > {item.example}', style='class:example')
+                console.print_styled()
             return
         if result == SelectionResult.ALL:
             for i in range(len(items)):
-                if not await save_single_lexeme(cfg, client, items[i], i):
-                    return
+                if i not in saved:
+                    cont, was_saved = await save_single_lexeme(cfg, client, items[i], i)
+                    if not cont:
+                        return
+                    if was_saved:
+                        saved.add(i)
         elif result == SelectionResult.SELECTED:
-            if not await save_single_lexeme(cfg, client, items[idx], idx):
+            cont, was_saved = await save_single_lexeme(cfg, client, items[idx], idx)
+            if not cont:
                 return
+            if was_saved:
+                saved.add(idx)
 
 
 async def read_interactively() -> str:
@@ -637,7 +782,6 @@ async def work() -> int:
         lexeme_data = await lexeme_task
         lexeme_items = [item for item in lexeme_data.items if item.cefr >= cfg.level]
         if lexeme_items:
-            print_save_cards_header()
             if sys.stdin.isatty() and cfg.db_conn_string:
                 await save_extracted_lexemes(cfg, client, lexeme_items)
             else:
