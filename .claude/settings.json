@@ -13,6 +13,11 @@
     "allow": [
       "Edit",
       "Write",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git status:*)",
+      "Bash(git ls-tree:*)",
       "Bash(python -m py_compile:*)",
       "Bash(python -m verna.create_spec:*)",
       "Bash(ruff check:*)",
