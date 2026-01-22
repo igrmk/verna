@@ -320,16 +320,15 @@ EXAMPLE_INSTRUCTIONS = JINJA_ENV.from_string(
 
 
 def print_identified_language(lang_data: LanguageDetectionResponse) -> None:
-    console.print_styled(f'Language detected: {lang_data.language}')
+    console.print_log(f'Language detected: {lang_data.language}')
     console.print_styled()
 
 
 def print_typo_note(typo_note: str | None) -> None:
     if not typo_note:
         return
+    console.print_formatted([('class:note-header', 'Typo Note: '), ('', typo_note)])
     console.print_styled()
-    console.print_styled('TYPO NOTE', 'class:note-header')
-    console.print_styled(typo_note)
 
 
 def print_translation(translation_data: TranslationResponse) -> None:
@@ -341,10 +340,7 @@ def print_translation(translation_data: TranslationResponse) -> None:
 
 
 def print_save_cards_header() -> None:
-    header = 'SAVE CARDS'
-    console.print_styled(header, 'class:section-header')
-    console.print_styled('─' * len(header), 'class:section-header')
-    console.print_styled()
+    console.print_formatted([('class:section-header', 'Save Cards'), ('', '\n')])
 
 
 class ConfirmResult(Enum):
@@ -504,12 +500,18 @@ class LexemeSelector:
             is_saved = idx in self.saved
             if is_saved:
                 prefix = ' ✓ '
+                prefix_style = 'class:success'
+                lexeme_style = 'class:success'
+            elif is_selected:
+                prefix = ' ▶ '
+                prefix_style = 'class:selected class:lexeme'
+                lexeme_style = 'class:lexeme'
             else:
-                prefix = ' ▶ ' if is_selected else '   '
-            style = (
-                'class:selected class:lexeme' if is_selected else ('class:success' if is_saved else 'class:lexeme-dim')
-            )
-            lines.append((style, f'{prefix}[{idx + 1}] {item.lexeme} ({item.cefr})'))
+                prefix = '   '
+                prefix_style = 'class:lexeme-dim'
+                lexeme_style = 'class:lexeme-dim'
+            lines.append((prefix_style, prefix))
+            lines.append((lexeme_style, f'[{idx + 1}] {item.lexeme} ({item.cefr})'))
             if item.example:
                 lines.append(('class:example', f'\n     > {item.example}'))
             lines.append(('', '\n\n'))
@@ -664,7 +666,8 @@ async def save_single_lexeme(
             proceed = True
             if len(db_card.example) > 0:
                 previous_examples += db_card.example
-            await make_example(cfg, client, db_card, previous_examples)
+            example_coro = make_example(cfg, client, db_card, previous_examples)
+            await show_status_while(f'Generating example for "{db_card.lexeme}"...', example_coro)
     return True, False
 
 
