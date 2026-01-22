@@ -498,7 +498,11 @@ class LexemeSelector:
         for idx, item in enumerate(self.items):
             is_selected = idx == self.selected_idx
             is_saved = idx in self.saved
-            if is_saved:
+            if is_saved and is_selected:
+                prefix = ' ✓ '
+                prefix_style = 'class:selected class:success'
+                lexeme_style = 'class:success'
+            elif is_saved:
                 prefix = ' ✓ '
                 prefix_style = 'class:success'
                 lexeme_style = 'class:success'
