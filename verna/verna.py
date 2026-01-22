@@ -503,7 +503,7 @@ class LexemeSelector:
             is_selected = idx == self.selected_idx
             is_saved = idx in self.saved
             if is_saved:
-                prefix = ' ✓ ' if not is_selected else ' ▶ '
+                prefix = ' ✓ '
             else:
                 prefix = ' ▶ ' if is_selected else '   '
             style = (
