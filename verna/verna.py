@@ -4,6 +4,8 @@ import json
 import sys
 import textwrap
 import argparse
+from collections.abc import Callable, Coroutine
+from typing import Any
 from verna import db, db_types
 from enum import Enum, auto
 import psycopg
@@ -483,22 +485,37 @@ class SelectionResult(Enum):
     QUIT = auto()
 
 
-class LexemeSelector:
+class LexemeSelector[T]:
+    _SPINNER_FRAMES = ['⣾', '⣷', '⣯', '⣟', '⡿', '⢿', '⣻', '⣽']
+
     def __init__(
-        self, items: list[LexemeExtractionResponse.Item], selected_idx: int = 0, saved: set[int] | None = None
+        self,
+        items: list[LexemeExtractionResponse.Item],
+        selected_idx: int = 0,
+        saved: set[int] | None = None,
+        on_select: Callable[[int], Coroutine[Any, Any, T]] | None = None,
     ):
         self.items = items
         self.selected_idx = min(selected_idx, len(items) - 1) if items else 0
         self.result: SelectionResult = SelectionResult.QUIT
         self._moved_down = False
         self.saved = saved or set()
+        self._on_select = on_select
+        self._loading_idx: int | None = None
+        self._spinner_idx = 0
+        self._select_result: T | None = None
 
     def _get_formatted_text(self) -> list[tuple[str, str]]:
         lines: list[tuple[str, str]] = []
         for idx, item in enumerate(self.items):
             is_selected = idx == self.selected_idx
             is_saved = idx in self.saved
-            if is_saved and is_selected:
+            is_loading = idx == self._loading_idx
+            if is_loading:
+                prefix = f' {self._SPINNER_FRAMES[self._spinner_idx]} '
+                prefix_style = 'class:lexeme'
+                lexeme_style = 'class:lexeme'
+            elif is_saved and is_selected:
                 prefix = ' ✓ '
                 prefix_style = 'class:selected class:success'
                 lexeme_style = 'class:success'
@@ -519,7 +536,8 @@ class LexemeSelector:
             if item.example:
                 lines.append(('class:example', f'\n     > {item.example}'))
             lines.append(('', '\n\n'))
-        lines.append(('class:dim', '↑/↓/j/k: navigate | Enter/1-9: select | a: all | Esc: quit'))
+        if self._loading_idx is None:
+            lines.append(('class:dim', '↑/↓/j/k: navigate | Enter/1-9: select | a: all | Esc: quit'))
         return lines
 
     def _count_item_lines(self, item: LexemeExtractionResponse.Item) -> int:
@@ -540,12 +558,37 @@ class LexemeSelector:
             line += item_lines
         return 0
 
+    async def _run_spinner(self, app: Application) -> None:
+        while self._loading_idx is not None:
+            await asyncio.sleep(0.08)
+            self._spinner_idx = (self._spinner_idx + 1) % len(self._SPINNER_FRAMES)
+            app.invalidate()
+
+    async def _run_select(self, app: Application, idx: int) -> None:
+        assert self._on_select is not None
+        self._loading_idx = idx
+        app.invalidate()
+        spinner_task = asyncio.create_task(self._run_spinner(app))
+        try:
+            self._select_result = await self._on_select(idx)
+        finally:
+            self._loading_idx = None
+            spinner_task.cancel()
+            try:
+                await spinner_task
+            except asyncio.CancelledError:
+                pass
+        self.result = SelectionResult.SELECTED
+        app.exit()
+
     def _create_key_bindings(self) -> KeyBindings:
         kb = KeyBindings()
 
         @kb.add('up')
         @kb.add('k')
         def _up(event):
+            if self._loading_idx is not None:
+                return
             if self.selected_idx > 0:
                 self.selected_idx -= 1
                 self._moved_down = False
@@ -553,22 +596,33 @@ class LexemeSelector:
         @kb.add('down')
         @kb.add('j')
         def _down(event):
+            if self._loading_idx is not None:
+                return
             if self.selected_idx < len(self.items) - 1:
                 self.selected_idx += 1
                 self._moved_down = True
 
         @kb.add('enter')
         def _select(event):
-            self.result = SelectionResult.SELECTED
-            event.app.exit()
+            if self._loading_idx is not None:
+                return
+            if self._on_select:
+                asyncio.create_task(self._run_select(event.app, self.selected_idx))
+            else:
+                self.result = SelectionResult.SELECTED
+                event.app.exit()
 
         @kb.add('a')
         def _all(event):
+            if self._loading_idx is not None:
+                return
             self.result = SelectionResult.ALL
             event.app.exit()
 
         @kb.add('escape')
         def _quit(event):
+            if self._loading_idx is not None:
+                return
             self.result = SelectionResult.QUIT
             event.app.exit()
 
@@ -576,14 +630,19 @@ class LexemeSelector:
 
             @kb.add(str(i), eager=True)
             def _number(event, idx=i - 1):
+                if self._loading_idx is not None:
+                    return
                 if idx < len(self.items):
                     self.selected_idx = idx
-                    self.result = SelectionResult.SELECTED
-                    event.app.exit()
+                    if self._on_select:
+                        asyncio.create_task(self._run_select(event.app, idx))
+                    else:
+                        self.result = SelectionResult.SELECTED
+                        event.app.exit()
 
         return kb
 
-    async def run(self) -> tuple[SelectionResult, int]:
+    async def run(self) -> tuple[SelectionResult, int, T | None]:
         control = FormattedTextControl(
             self._get_formatted_text,
             show_cursor=False,
@@ -600,7 +659,7 @@ class LexemeSelector:
             erase_when_done=True,
         )
         await app.run_async()
-        return self.result, self.selected_idx
+        return self.result, self.selected_idx, self._select_result
 
 
 def _count_lines(parts: list[tuple[str, str]]) -> int:
@@ -631,13 +690,22 @@ async def show_status_while(message: str, coro):
     return result
 
 
-async def save_single_lexeme(
-    cfg: argparse.Namespace, client: AsyncOpenAI, item: LexemeExtractionResponse.Item, idx: int
-) -> tuple[bool, bool]:
-    """Save a single lexeme. Returns (continue, saved) tuple."""
+async def translate_single_lexeme(
+    cfg: argparse.Namespace, client: AsyncOpenAI, item: LexemeExtractionResponse.Item
+) -> LexemeTranslationResponse:
+    """Translate a single lexeme."""
     lexeme_text = item.lexeme.strip()
-    coro = translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
-    tr = await show_status_while(f'Translating "{lexeme_text}"...', coro)
+    return await translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
+
+
+async def confirm_and_save_lexeme(
+    cfg: argparse.Namespace,
+    client: AsyncOpenAI,
+    item: LexemeExtractionResponse.Item,
+    tr: LexemeTranslationResponse,
+    idx: int,
+) -> tuple[bool, bool]:
+    """Show confirm dialog and save lexeme. Returns (continue, saved) tuple."""
     card = Card(
         lexeme=tr.lexeme,
         translations=tr.translations,
@@ -675,6 +743,16 @@ async def save_single_lexeme(
     return True, False
 
 
+async def save_single_lexeme(
+    cfg: argparse.Namespace, client: AsyncOpenAI, item: LexemeExtractionResponse.Item, idx: int
+) -> tuple[bool, bool]:
+    """Translate and save a single lexeme with status message. Returns (continue, saved) tuple."""
+    lexeme_text = item.lexeme.strip()
+    coro = translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
+    tr = await show_status_while(f'Translating "{lexeme_text}"...', coro)
+    return await confirm_and_save_lexeme(cfg, client, item, tr, idx)
+
+
 async def save_extracted_lexemes(
     cfg: argparse.Namespace, client: AsyncOpenAI, items: list[LexemeExtractionResponse.Item]
 ) -> None:
@@ -692,10 +770,13 @@ async def save_extracted_lexemes(
         console.print_styled()
         return
 
+    async def on_select(idx: int) -> LexemeTranslationResponse:
+        return await translate_single_lexeme(cfg, client, items[idx])
+
     selected_idx = 0
     while True:
-        selector = LexemeSelector(items, selected_idx, saved)
-        result, idx = await selector.run()
+        selector = LexemeSelector(items, selected_idx, saved, on_select=on_select)
+        result, idx, tr = await selector.run()
         selected_idx = idx
         if result == SelectionResult.QUIT:
             # Print final state of the list
@@ -717,7 +798,8 @@ async def save_extracted_lexemes(
                     if was_saved:
                         saved.add(i)
         elif result == SelectionResult.SELECTED:
-            cont, was_saved = await save_single_lexeme(cfg, client, items[idx], idx)
+            assert tr is not None
+            cont, was_saved = await confirm_and_save_lexeme(cfg, client, items[idx], tr, idx)
             if not cont:
                 return
             if was_saved:
