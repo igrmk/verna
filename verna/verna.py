@@ -485,6 +485,10 @@ class SelectionResult(Enum):
     QUIT = auto()
 
 
+def _save_prefix(inserted: bool) -> str:
+    return ' ✓ ' if inserted else ' ⊕ '
+
+
 class LexemeSelector[T]:
     _SPINNER_FRAMES = ['⣾', '⣷', '⣯', '⣟', '⡿', '⢿', '⣻', '⣽']
 
@@ -492,14 +496,14 @@ class LexemeSelector[T]:
         self,
         items: list[LexemeExtractionResponse.Item],
         selected_idx: int = 0,
-        saved: set[int] | None = None,
+        saved: dict[int, bool] | None = None,
         on_select: Callable[[int], Coroutine[Any, Any, T]] | None = None,
     ):
         self.items = items
         self.selected_idx = min(selected_idx, len(items) - 1) if items else 0
         self.result: SelectionResult = SelectionResult.QUIT
         self._moved_down = False
-        self.saved = saved or set()
+        self.saved = saved or {}
         self._on_select = on_select
         self._loading_idx: int | None = None
         self._spinner_idx = 0
@@ -516,11 +520,11 @@ class LexemeSelector[T]:
                 prefix_style = 'class:lexeme'
                 lexeme_style = 'class:lexeme'
             elif is_saved and is_selected:
-                prefix = ' ✓ '
+                prefix = _save_prefix(self.saved[idx])
                 prefix_style = 'class:selected class:success'
                 lexeme_style = 'class:success'
             elif is_saved:
-                prefix = ' ✓ '
+                prefix = _save_prefix(self.saved[idx])
                 prefix_style = 'class:success'
                 lexeme_style = 'class:success'
             elif is_selected:
@@ -704,8 +708,11 @@ async def confirm_and_save_lexeme(
     item: LexemeExtractionResponse.Item,
     tr: LexemeTranslationResponse,
     idx: int,
-) -> tuple[bool, bool]:
-    """Show confirm dialog and save lexeme. Returns (continue, saved) tuple."""
+) -> tuple[bool, bool | None]:
+    """Show confirm dialog and save lexeme. Returns (continue, inserted) tuple.
+
+    inserted is None if not saved, True if inserted, False if merged.
+    """
     card = Card(
         lexeme=tr.lexeme,
         translations=tr.translations,
@@ -725,14 +732,14 @@ async def confirm_and_save_lexeme(
         lines_to_clear = _count_lines(parts) + 2
         if res == ConfirmResult.QUIT:
             console.clear_lines_above(lines_to_clear)
-            return False, False
+            return False, None
         if res == ConfirmResult.YES:
-            save_card(cfg, db_card)
+            inserted = save_card(cfg, db_card)
             console.clear_lines_above(lines_to_clear)
-            return True, True
+            return True, inserted
         if res == ConfirmResult.NO:
             console.clear_lines_above(lines_to_clear)
-            return True, False
+            return True, None
         if res == ConfirmResult.EXAMPLE:
             console.clear_lines_above(lines_to_clear)
             proceed = True
@@ -740,13 +747,16 @@ async def confirm_and_save_lexeme(
                 previous_examples += db_card.example
             example_coro = make_example(cfg, client, db_card, previous_examples)
             await show_status_while(f'Generating example for "{db_card.lexeme}"...', example_coro)
-    return True, False
+    return True, None
 
 
 async def save_single_lexeme(
     cfg: argparse.Namespace, client: AsyncOpenAI, item: LexemeExtractionResponse.Item, idx: int
-) -> tuple[bool, bool]:
-    """Translate and save a single lexeme with status message. Returns (continue, saved) tuple."""
+) -> tuple[bool, bool | None]:
+    """Translate and save a single lexeme with status message. Returns (continue, inserted) tuple.
+
+    inserted is None if not saved, True if inserted, False if merged.
+    """
     lexeme_text = item.lexeme.strip()
     coro = translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
     tr = await show_status_while(f'Translating "{lexeme_text}"...', coro)
@@ -757,12 +767,12 @@ async def save_extracted_lexemes(
     cfg: argparse.Namespace, client: AsyncOpenAI, items: list[LexemeExtractionResponse.Item]
 ) -> None:
     print_save_cards_header()
-    saved: set[int] = set()
+    saved: dict[int, bool] = {}
 
     if len(items) == 1:
-        _, was_saved = await save_single_lexeme(cfg, client, items[0], 0)
-        if was_saved:
-            console.print_styled(f' ✓ [1] {items[0].lexeme}', style='class:success')
+        _, inserted = await save_single_lexeme(cfg, client, items[0], 0)
+        if inserted is not None:
+            console.print_styled(f'{_save_prefix(inserted)}[1] {items[0].lexeme}', style='class:success')
         else:
             console.print_styled(f'   [1] {items[0].lexeme}', style='class:lexeme-dim')
         if items[0].example:
@@ -782,7 +792,7 @@ async def save_extracted_lexemes(
             # Print final state of the list
             for i, item in enumerate(items):
                 if i in saved:
-                    console.print_styled(f' ✓ [{i + 1}] {item.lexeme}', style='class:success')
+                    console.print_styled(f'{_save_prefix(saved[i])}[{i + 1}] {item.lexeme}', style='class:success')
                 else:
                     console.print_styled(f'   [{i + 1}] {item.lexeme}', style='class:lexeme-dim')
                 if item.example:
@@ -792,18 +802,18 @@ async def save_extracted_lexemes(
         if result == SelectionResult.ALL:
             for i in range(len(items)):
                 if i not in saved:
-                    cont, was_saved = await save_single_lexeme(cfg, client, items[i], i)
+                    cont, inserted = await save_single_lexeme(cfg, client, items[i], i)
                     if not cont:
                         return
-                    if was_saved:
-                        saved.add(i)
+                    if inserted is not None:
+                        saved[i] = inserted
         elif result == SelectionResult.SELECTED:
             assert tr is not None
-            cont, was_saved = await confirm_and_save_lexeme(cfg, client, items[idx], tr, idx)
+            cont, inserted = await confirm_and_save_lexeme(cfg, client, items[idx], tr, idx)
             if not cont:
                 return
-            if was_saved:
-                saved.add(idx)
+            if inserted is not None:
+                saved[idx] = inserted
 
 
 async def read_interactively() -> str:
