@@ -9,7 +9,7 @@ from typing import Any
 from verna import db, db_types
 from enum import Enum, auto
 import psycopg
-from openai import APITimeoutError, AsyncOpenAI
+from openai import APIError, APITimeoutError, AsyncOpenAI
 from openai.types.responses import ResponseInputParam
 from openai.types.shared_params import Reasoning
 from pydantic import BaseModel, Field
@@ -889,6 +889,9 @@ def main() -> int:
         return asyncio.run(work())
     except KeyboardInterrupt:
         return 0
+    except APIError as e:
+        print(f'API error: {e.message}', file=sys.stderr)
+        return 1
 
 
 if __name__ == '__main__':
