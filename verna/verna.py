@@ -862,7 +862,12 @@ async def work() -> int:
     if lang_data.language == Language.ENGLISH and len(query.split()) == 1:
         item = LexemeExtractionResponse.Item(lexeme=query, example=None, cefr=CefrLevel.C2)
         if sys.stdin.isatty() and cfg.db_conn_string:
-            await save_single_lexeme(cfg, client, item, 0)
+            _, inserted = await save_single_lexeme(cfg, client, item, 0)
+            if inserted is not None:
+                console.print_styled(f'{_save_prefix(inserted)}[1] {item.lexeme}', style='class:success')
+            else:
+                console.print_styled(f'   [1] {item.lexeme}', style='class:lexeme-dim')
+            console.print_styled()
         else:
             tr = await translate_lexeme(cfg, client, lexeme_text=query)
             card = Card(lexeme=tr.lexeme, translations=tr.translations, example=None)
