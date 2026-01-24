@@ -13,6 +13,7 @@
     "allow": [
       "Edit",
       "Write",
+      "WebSearch",
       "Bash(git diff:*)",
       "Bash(git log:*)",
       "Bash(git show:*)",
@@ -23,7 +24,7 @@
       "Bash(ruff check:*)",
       "Bash(ruff format:*)",
       "Bash(mypy:*)",
-      "WebSearch"
+      "Bash(ls:*)"
     ]
   }
 }
