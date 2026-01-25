@@ -44,10 +44,10 @@ def send_to_telegram_all(
 
 GENERAL_INSTRUCTIONS = 'Do not explain your actions. Do not ask questions. Output ONLY JSON matching the schema.'
 
-INSTRUCTIONS = textwrap.dedent("""
+INSTRUCTIONS_TEMPLATE = textwrap.dedent("""
     Generate example sentences. Rules:
     - "lexeme" field: copy the input lexeme EXACTLY, nothing else
-    - "examples" field: array of exactly 3 sentences, each showing a different meaning
+    - "examples" field: array of exactly {generate_examples} sentences, each showing a different meaning
     - Keep each sentence under 12 words
 """).strip()
 
@@ -78,8 +78,10 @@ def main() -> None:
     lexeme_list = '\n'.join(card.lexeme for card in cards)
     request_text = f'Lexemes:\n{lexeme_list}'
 
+    instructions = INSTRUCTIONS_TEMPLATE.format(generate_examples=cfg.generate_examples)
+
     input_messages = [
-        {'role': 'system', 'content': INSTRUCTIONS},
+        {'role': 'system', 'content': instructions},
         {'role': 'user', 'content': request_text},
     ]
 

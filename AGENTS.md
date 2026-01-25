@@ -115,3 +115,4 @@ No test suite currently. Test manually by running commands with `--debug` flag.
 ### Adding a new CLI option
 1. Add argument in `config.py` under the appropriate `_add_*` function
 2. Use the option via `cfg.<option_name>` in the relevant module, don't use `getattr`
+3. Set default values in `verna.ini`, not in `config.py`

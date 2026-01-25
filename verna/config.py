@@ -173,6 +173,13 @@ def _add_random(p: configargparse.ArgParser) -> None:
         required=True,
         help='number of random cards to fetch',
     )
+    p.add_argument(
+        '--generate-examples',
+        type=int,
+        metavar='N',
+        required=True,
+        help='number of AI-generated examples per lexeme',
+    )
 
 
 def _add_verna(p: configargparse.ArgParser) -> None:
