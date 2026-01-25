@@ -816,6 +816,17 @@ async def save_extracted_lexemes(
                 saved[idx] = inserted
 
 
+def normalize_input(text: str) -> str:
+    """Convert various apostrophes to ASCII ' and quotes to ASCII "."""
+    apostrophes = '\u2018\u2019\u201a\u201b\u02bc\u02bb`'
+    quotes = '\u201c\u201d\u201e\u201f\u00ab\u00bb'
+    for ch in apostrophes:
+        text = text.replace(ch, "'")
+    for ch in quotes:
+        text = text.replace(ch, '"')
+    return text
+
+
 async def read_interactively() -> str:
     kb = KeyBindings()
 
@@ -850,6 +861,7 @@ async def work() -> int:
         query = (await read_interactively()).strip()
     if not query:
         raise no_query_error
+    query = normalize_input(query)
 
     client = AsyncOpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
     lang_data = await detect_language(cfg, client, query)
