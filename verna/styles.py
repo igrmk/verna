@@ -4,6 +4,7 @@ PT_STYLES = {
     'lexeme': 'bold fg:ansicyan',
     'lexeme-italic': 'bold italic fg:ansicyan',
     'example': 'italic fg:#bbbbbb',
+    'example-generated': 'italic fg:#888888',
     'section-header': 'fg:ansiwhite bold italic',
     'log': 'fg:#777777',
     'debug': 'fg:ansibrightblack',

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-**Verna** is a CLI tool for English-Russian translation and vocabulary learning. It translates words and texts between English and Russian, extracts and saves advanced English lexemes as flashcards to a PostgreSQL database, and can send daily vocabulary cards with AI-generated stories to Telegram.
+**Verna** is a CLI tool for English-Russian translation and vocabulary learning. It translates words and texts between English and Russian, extracts and saves advanced English lexemes as flashcards to a PostgreSQL database, and can send daily vocabulary cards with AI-generated example sentences to Telegram.
 
 ## Tech Stack
 
@@ -37,7 +37,7 @@ verna/
 | Command        | Module                     | Description                                          |
 |----------------|----------------------------|------------------------------------------------------|
 | `verna`        | `verna.verna:main`         | Main translation tool                                |
-| `verna-cards`  | `verna.random_cards:main`  | Fetch random cards, generate story, send to Telegram |
+| `verna-cards`  | `verna.random_cards:main`  | Fetch random cards, generate examples, send to Telegram |
 | `verna-edit`   | `verna.edit:main`          | TUI editor for searching and editing lexemes         |
 
 ## Main Workflow (`verna`)

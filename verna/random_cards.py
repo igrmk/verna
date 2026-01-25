@@ -10,9 +10,13 @@ from pydantic import BaseModel
 from verna.config import get_parser, Sections, print_config, ReasoningLevel
 
 
-class Passage(BaseModel):
-    english: str
-    russian: str
+class LexemeExamples(BaseModel):
+    lexeme: str
+    examples: list[str]
+
+
+class GeneratedExamples(BaseModel):
+    lexemes: list[LexemeExamples]
 
 
 def send_telegram_message(
@@ -28,30 +32,23 @@ def send_telegram_message(
 
 
 def send_to_telegram_all(
-    cards: list[str],
-    english: str,
-    russian: str,
+    messages: list[str],
     *,
     bot_token: str,
     chat_id: str,
 ) -> None:
-    for msg in cards:
+    for msg in messages:
         if msg.strip():
             send_telegram_message(msg, bot_token=bot_token, chat_id=chat_id)
-    if english.strip():
-        send_telegram_message(english.strip(), bot_token=bot_token, chat_id=chat_id)
-    if russian.strip():
-        send_telegram_message(russian.strip(), bot_token=bot_token, chat_id=chat_id)
 
+
+GENERAL_INSTRUCTIONS = 'Do not explain your actions. Do not ask questions. Output ONLY JSON matching the schema.'
 
 INSTRUCTIONS = textwrap.dedent("""
-    You are a text generator. Output ONLY JSON that matches the given schema.
-    Produce two fields:
-      - `english`: a cohesive British English spy thriller passage (≤ 400 words).
-        Use simple, natural language.
-        Format each provided lexeme in the text as "[number] lexeme".
-      - `russian`: a natural Russian translation of the entire English passage.
-        Do not include numbers or English lexemes.
+    Generate example sentences. Rules:
+    - "lexeme" field: copy the input lexeme EXACTLY, nothing else
+    - "examples" field: array of exactly 3 sentences, each showing a different meaning
+    - Keep each sentence under 12 words
 """).strip()
 
 
@@ -76,26 +73,21 @@ def main() -> None:
         print('No lexemes found in cards', file=sys.stderr)
         return
 
-    tg_card_messages: list[str] = []
-    for idx, card in enumerate(cards, 1):
-        console.print_styled()
-        parts = [('class:lexeme', f'[{idx}] ')] + db_types.format_card(card, indent=2)
-        console.print_formatted(parts)
-        tg_card_messages.append(f'[{idx}] ' + db_types.format_card_plain(card))
-
     client = OpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
 
-    lexeme_list = '\n'.join(f'[{idx}] {card.lexeme}' for idx, card in enumerate(cards, 1))
-    request_text = textwrap.dedent(f"""
-        Lexemes to use (any sensible form):
-        {lexeme_list}
-    """).strip()
+    lexeme_list = '\n'.join(card.lexeme for card in cards)
+    request_text = f'Lexemes:\n{lexeme_list}'
 
-    kwargs = {
+    input_messages = [
+        {'role': 'system', 'content': INSTRUCTIONS},
+        {'role': 'user', 'content': request_text},
+    ]
+
+    kwargs: dict = {
         'model': cfg.model,
-        'instructions': INSTRUCTIONS,
-        'input': request_text,
-        'text_format': Passage,
+        'instructions': GENERAL_INSTRUCTIONS,
+        'input': input_messages,
+        'text_format': GeneratedExamples,
     }
 
     if cfg.reason != ReasoningLevel.UNSUPPORTED:
@@ -103,27 +95,39 @@ def main() -> None:
 
     resp = client.responses.parse(**kwargs)
 
+    if cfg.debug:
+        console.print_debug(f'Raw output: {resp.output_text}')
+
     if resp.output_parsed is None:
         raise SystemExit('AI response could not be parsed')
 
-    data: Passage = resp.output_parsed
+    data: GeneratedExamples = resp.output_parsed
 
-    console.print_styled()
-    console.print_styled()
-    console.print_styled(data.english.strip())
-    console.print_styled()
-    console.print_styled()
-    console.print_styled(data.russian.strip())
+    if cfg.debug:
+        console.print_debug(f'Parsed {len(data.lexemes)} lexemes:')
+        for item in data.lexemes:
+            console.print_debug(f'  {item.lexeme!r}: {item.examples!r}')
+
+    examples_by_lexeme = {item.lexeme.lower(): item.examples for item in data.lexemes}
+
+    tg_messages: list[str] = []
+    for idx, card in enumerate(cards, 1):
+        examples = examples_by_lexeme.get(card.lexeme.lower(), [])
+        console.print_styled()
+        parts = [('class:lexeme', f'[{idx}] ')] + db_types.format_card(card, indent=2)
+        for ex in examples:
+            parts.append(('', '\n  » '))
+            parts.append(('class:example-generated', ex))
+        console.print_formatted(parts)
+
+        tg_lines = [f'[{idx}] ' + db_types.format_card_plain(card)]
+        for ex in examples:
+            tg_lines.append(f'   » {ex}')
+        tg_messages.append('\n'.join(tg_lines))
 
     if cfg.send_to_tg:
         try:
-            send_to_telegram_all(
-                tg_card_messages,
-                data.english,
-                data.russian,
-                bot_token=cfg.tg_bot_token,
-                chat_id=str(cfg.tg_chat_id),
-            )
+            send_to_telegram_all(tg_messages, bot_token=cfg.tg_bot_token, chat_id=str(cfg.tg_chat_id))
             print('\n[Sent to Telegram]')
         except Exception as e:
             print(f'\n[Failed to send to Telegram: {e}]')

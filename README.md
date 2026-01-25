@@ -3,7 +3,7 @@ Verna
 
 This tool translates words and texts between English and Russian,
 saves advanced English words and phrases as cards for later memorisation,
-and sends your daily cards and a short story featuring them in Telegram.
+and sends your daily cards with AI-generated example sentences to Telegram.
 
 In many languages, the word for "translation" contains "ver".
 This useless fact inspired the tool's name.
