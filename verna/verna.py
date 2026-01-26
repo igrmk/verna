@@ -246,6 +246,8 @@ LEXEME_EXTRACTION_INSTRUCTIONS = textwrap.dedent("""
 
     Extract all English lexemes that appear in the user input.
     Search for multi-word lexemes (e.g. phrasal verbs, idioms, and collocations) in addition to single-word lexemes.
+    When a word is part of a phrasal verb or idiom, extract BOTH the multi-word lexeme AND the single-word lexeme separately.
+    For example, "pick up" should yield both "pick up" and "pick".
     Exclude proper names.
     Treat different forms (e.g., verb and noun) as one lexeme.
 
