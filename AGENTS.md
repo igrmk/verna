@@ -101,7 +101,7 @@ Run migrations with: `python -m verna.migrator`
 
 ## Commits
 
-- Use conventional commit style
+- Use conventional commit style with single-line messages
 - Run git commands without -C flag—working directory is already the project root
 - Use proper em-dash (—) when grammar requires it
 

@@ -245,7 +245,7 @@ LEXEME_EXTRACTION_INSTRUCTIONS = textwrap.dedent("""
     Prefer UK spelling over US spelling
 
     Extract all English lexemes that appear in the user input.
-    Search for multi-word lexemes (e.g. phrasal verbs and phrasemes) in addition to single-word lexemes.
+    Search for multi-word lexemes (e.g. phrasal verbs, idioms, and collocations) in addition to single-word lexemes.
     Exclude proper names.
     Treat different forms (e.g., verb and noun) as one lexeme.
 
