@@ -21,8 +21,10 @@ from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.widgets import Frame, TextArea
 from prompt_toolkit.styles import Style
 
+import re
+
 from verna.config import get_parser, Sections, print_config
-from verna.db_types import Card, format_card
+from verna.db_types import Card, Translation, format_card
 from verna import styles
 
 from typing import Callable
@@ -321,7 +323,7 @@ class ResultsPanel:
 
 
 class EditorPanel:
-    SINGLE_LINE_FIELD_COUNT = 6  # lexeme, rp, past_simple, past_simple_rp, past_participle, past_participle_rp
+    SINGLE_LINE_FIELD_COUNT = 5  # lexeme, past_simple, past_simple_rp, past_participle, past_participle_rp
 
     def __init__(
         self,
@@ -344,7 +346,6 @@ class EditorPanel:
         # Create form fields with read_only filter
         field_readonly = Condition(lambda: not self._in_any_form_field())
         self.field_lexeme = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
-        self.field_rp = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
         self.field_past_simple = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
         self.field_past_simple_rp = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
         self.field_past_participle = TextArea(height=1, multiline=False, wrap_lines=False, read_only=field_readonly)
@@ -366,7 +367,6 @@ class EditorPanel:
 
         self.form_fields = [
             ('Lexeme', self.field_lexeme),
-            ('RP', self.field_rp),
             ('Past simple', self.field_past_simple),
             ('Past simple RP', self.field_past_simple_rp),
             ('Past participle', self.field_past_participle),
@@ -408,21 +408,46 @@ class EditorPanel:
 
     def _load_card_to_form(self, card: Card) -> None:
         self.field_lexeme.text = card.lexeme
-        self.field_rp.text = ', '.join(card.rp)
         self.field_past_simple.text = card.past_simple or ''
         self.field_past_simple_rp.text = ', '.join(card.past_simple_rp)
         self.field_past_participle.text = card.past_participle or ''
         self.field_past_participle_rp.text = ', '.join(card.past_participle_rp)
-        self.field_translations.text = '\n'.join(card.translations)
+        # Format translations as "/rp1/ /rp2/ text" or just "text" if no RP
+        translation_lines = []
+        for t in card.translations:
+            rp_part = ' '.join(f'/{rp}/' for rp in t.rp)
+            if rp_part:
+                translation_lines.append(f'{rp_part} {t.text}')
+            else:
+                translation_lines.append(t.text)
+        self.field_translations.text = '\n'.join(translation_lines)
         self.field_example.text = '\n'.join(card.example)
 
+    def _parse_translation_line(self, line: str) -> Translation:
+        """Parse a translation line in format '/rp1/ /rp2/ text' or just 'text'."""
+        line = line.strip()
+        rp_list: list[str] = []
+        # Extract all /.../ patterns from the beginning
+        rp_pattern = re.compile(r'^(/[^/]+/\s*)+')
+        match = rp_pattern.match(line)
+        if match:
+            rp_part = match.group(0)
+            text = line[len(rp_part) :].strip()
+            # Extract individual RPs
+            rp_list = [rp.strip() for rp in re.findall(r'/([^/]+)/', rp_part)]
+        else:
+            text = line
+        return Translation(text=text, rp=rp_list)
+
     def _form_to_card(self) -> Card:
-        rp_text = self.field_rp.text.strip()
         past_simple_rp_text = self.field_past_simple_rp.text.strip()
         past_participle_rp_text = self.field_past_participle_rp.text.strip()
+        # Parse translations from lines
+        translations = [
+            self._parse_translation_line(line) for line in self.field_translations.text.split('\n') if line.strip()
+        ]
         return Card(
             lexeme=self.field_lexeme.text.strip(),
-            rp=[x.strip() for x in rp_text.split(',') if x.strip()] if rp_text else [],
             past_simple=self.field_past_simple.text.strip() or None,
             past_simple_rp=[x.strip() for x in past_simple_rp_text.split(',') if x.strip()]
             if past_simple_rp_text
@@ -431,7 +456,7 @@ class EditorPanel:
             past_participle_rp=[x.strip() for x in past_participle_rp_text.split(',') if x.strip()]
             if past_participle_rp_text
             else [],
-            translations=[x.strip() for x in self.field_translations.text.split('\n') if x.strip()],
+            translations=translations,
             example=[x.strip() for x in self.field_example.text.split('\n') if x.strip()],
         )
 
@@ -442,7 +467,6 @@ class EditorPanel:
         orig = self.original_card
         return (
             current.lexeme != orig.lexeme
-            or current.rp != orig.rp
             or current.past_simple != orig.past_simple
             or current.past_simple_rp != orig.past_simple_rp
             or current.past_participle != orig.past_participle
@@ -585,9 +609,9 @@ class EditorPanel:
         form_rows: list[Container] = [self.form_nav_window]
         for idx, (label, field) in enumerate(self.form_fields):
             form_rows.append(self._create_form_row(idx, label, field))
-            if idx == 5:  # After past_participle_rp
+            if idx == 4:  # After past_participle_rp
                 form_rows.append(Window(height=1))
-            if idx == 6:  # After translations
+            if idx == 5:  # After translations
                 form_rows.append(Window(height=1))
 
         form = VSplit(

@@ -99,8 +99,9 @@ Run migrations with: `python -m verna.migrator`
 - SQL: lowercase keywords, if select columns don't fit on a single line, put each column on a new line
 - Markdown prose: max 100 chars per line, break at logical phrase boundaries
 
-## Commits
+## Git
 
+- Use modern git commands: `git switch` instead of `checkout`, `git restore` instead of `checkout --`
 - Use conventional commit style with single-line messages
 - Run git commands without -C flag—working directory is already the project root
 - Use proper em-dash (—) when grammar requires it

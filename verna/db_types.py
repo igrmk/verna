@@ -1,15 +1,20 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+
+@dataclass
+class Translation:
+    text: str
+    rp: list[str] = field(default_factory=list)
 
 
 @dataclass
 class Card:
     lexeme: str
-    rp: list[str]
     past_simple: str | None
     past_simple_rp: list[str]
     past_participle: str | None
     past_participle_rp: list[str]
-    translations: list[str]
+    translations: list[Translation]
     example: list[str]
 
 
@@ -21,10 +26,6 @@ def format_card(card: Card, *, focused: bool = True, indent: int = 0) -> list[tu
     parts: list[tuple[str, str]] = []
 
     parts.append((lexeme_style, card.lexeme))
-    for rp in card.rp:
-        parts.append(('', ' /'))
-        parts.append(('class:transcription', rp))
-        parts.append(('', '/'))
 
     if card.past_simple or card.past_participle:
         parts.append(('', f'\n{pad}'))
@@ -43,9 +44,13 @@ def format_card(card: Card, *, focused: bool = True, indent: int = 0) -> list[tu
                 parts.append(('class:transcription', rp))
                 parts.append(('', '/'))
 
-    for x in card.translations:
+    for t in card.translations:
         parts.append(('', f'\n{pad}• '))
-        parts.append(('', x))
+        for rp in t.rp:
+            parts.append(('', '/'))
+            parts.append(('class:transcription', rp))
+            parts.append(('', '/ '))
+        parts.append(('', t.text))
 
     for s in card.example:
         parts.append(('', f'\n{pad}> '))
@@ -56,10 +61,7 @@ def format_card(card: Card, *, focused: bool = True, indent: int = 0) -> list[tu
 
 def format_card_plain(card: Card) -> str:
     lines = []
-    header = card.lexeme
-    if card.rp:
-        header += ' /' + '/, /'.join(card.rp) + '/'
-    lines.append(header)
+    lines.append(card.lexeme)
 
     if card.past_simple or card.past_participle:
         line = '   PAST:'
@@ -74,8 +76,12 @@ def format_card_plain(card: Card) -> str:
                 line += f' /{rp}/'
         lines.append(line)
 
-    for x in card.translations:
-        lines.append(f'   • {x}')
+    for t in card.translations:
+        rp_str = ' '.join(f'/{rp}/' for rp in t.rp)
+        if rp_str:
+            lines.append(f'   • {rp_str} {t.text}')
+        else:
+            lines.append(f'   • {t.text}')
 
     for s in card.example:
         lines.append(f'   > {s}')

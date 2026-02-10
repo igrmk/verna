@@ -1,6 +1,17 @@
 from psycopg import Connection
+from psycopg.types.json import Json
 
-from verna.db_types import Card
+from verna.db_types import Card, Translation
+
+
+def _translations_to_json(translations: list[Translation]) -> Json:
+    return Json([{'text': t.text, 'rp': t.rp} for t in translations])
+
+
+def _json_to_translations(data: list | None) -> list[Translation]:
+    if not data:
+        return []
+    return [Translation(text=item['text'], rp=item.get('rp') or []) for item in data]
 
 
 def save_card(conn: Connection, card: Card) -> bool:
@@ -10,7 +21,6 @@ def save_card(conn: Connection, card: Card) -> bool:
             """
             insert into cards (
                 lexeme,
-                rp,
                 past_simple,
                 past_simple_rp,
                 past_participle,
@@ -18,15 +28,15 @@ def save_card(conn: Connection, card: Card) -> bool:
                 translations,
                 example
             )
-            values (%s, %s, %s, %s, %s, %s, %s, %s)
+            values (%s, %s, %s, %s, %s, %s, %s)
             on conflict (lower(lexeme)) do update set
                 translations = (
-                    select coalesce(array_agg(distinct x), '{}')
-                    from unnest(cards.translations || excluded.translations) as x
-                ),
-                rp = (
-                    select coalesce(array_agg(distinct x), '{}')
-                    from unnest(cards.rp || excluded.rp) as x
+                    select jsonb_agg(distinct_t)
+                    from (
+                        select distinct on ((elem->>'text')) elem as distinct_t
+                        from jsonb_array_elements(cards.translations || excluded.translations) as elem
+                        order by (elem->>'text')
+                    ) as distinct_translations
                 ),
                 past_simple = coalesce(cards.past_simple, excluded.past_simple),
                 past_simple_rp = (
@@ -46,12 +56,11 @@ def save_card(conn: Connection, card: Card) -> bool:
             """,
             (
                 card.lexeme,
-                card.rp,
                 card.past_simple,
                 card.past_simple_rp,
                 card.past_participle,
                 card.past_participle_rp,
-                card.translations,
+                _translations_to_json(card.translations),
                 card.example,
             ),
         )
@@ -69,7 +78,6 @@ def update_card(conn: Connection, card_id: int, card: Card) -> None:
             """
             update cards set
                 lexeme = %s,
-                rp = %s,
                 past_simple = %s,
                 past_simple_rp = %s,
                 past_participle = %s,
@@ -80,12 +88,11 @@ def update_card(conn: Connection, card_id: int, card: Card) -> None:
             """,
             (
                 card.lexeme,
-                card.rp,
                 card.past_simple,
                 card.past_simple_rp,
                 card.past_participle,
                 card.past_participle_rp,
-                card.translations,
+                _translations_to_json(card.translations),
                 card.example,
                 card_id,
             ),
@@ -109,7 +116,6 @@ def search_cards(conn: Connection, query: str, limit: int = 50) -> list[tuple[in
                 select
                     id,
                     lexeme,
-                    rp,
                     past_simple,
                     past_simple_rp,
                     past_participle,
@@ -129,7 +135,6 @@ def search_cards(conn: Connection, query: str, limit: int = 50) -> list[tuple[in
                 select
                     id,
                     lexeme,
-                    rp,
                     past_simple,
                     past_simple_rp,
                     past_participle,
@@ -149,13 +154,12 @@ def search_cards(conn: Connection, query: str, limit: int = 50) -> list[tuple[in
             row[0],
             Card(
                 lexeme=row[1],
-                rp=row[2] or [],
-                past_simple=row[3],
-                past_simple_rp=row[4] or [],
-                past_participle=row[5],
-                past_participle_rp=row[6] or [],
-                translations=row[7] or [],
-                example=row[8] or [],
+                past_simple=row[2],
+                past_simple_rp=row[3] or [],
+                past_participle=row[4],
+                past_participle_rp=row[5] or [],
+                translations=_json_to_translations(row[6]),
+                example=row[7] or [],
             ),
         )
         for row in rows
@@ -169,7 +173,6 @@ def fetch_random_cards(conn: Connection, limit: int) -> list[Card]:
             """
             select
                 lexeme,
-                rp,
                 past_simple,
                 past_simple_rp,
                 past_participle,
@@ -186,13 +189,12 @@ def fetch_random_cards(conn: Connection, limit: int) -> list[Card]:
         return [
             Card(
                 lexeme=row[0],
-                rp=row[1] or [],
-                past_simple=row[2],
-                past_simple_rp=row[3] or [],
-                past_participle=row[4],
-                past_participle_rp=row[5] or [],
-                translations=row[6] or [],
-                example=row[7] or [],
+                past_simple=row[1],
+                past_simple_rp=row[2] or [],
+                past_participle=row[3],
+                past_participle_rp=row[4] or [],
+                translations=_json_to_translations(row[5]),
+                example=row[6] or [],
             )
             for row in rows
         ]

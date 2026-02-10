@@ -76,9 +76,14 @@ class LexemeExtractionResponse(BaseModel):
     items: list[Item] = Field(default_factory=list)
 
 
+class Translation(BaseModel):
+    text: str
+    rp: list[str] = Field(default_factory=list)
+
+
 class LexemeTranslationResponse(BaseModel):
     lexeme: Lexeme
-    translations: list[str] = Field(default_factory=list)
+    translations: list[Translation] = Field(default_factory=list)
 
 
 class ExampleResponse(BaseModel):
@@ -283,9 +288,13 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
           - `past_simple` and `past_participle` — only if L is an irregular verb; same Form structure
 
         Then translate it to Russian and fill
-        `translations` — exhaustive list of Russian translations covering all parts of speech
+        `translations` — exhaustive list of Translation objects covering all parts of speech
         (nouns, verbs, adjectives, adverbs, etc.) but avoiding very close synonyms.
-        Each item must be a single translation, not multiple translations separated by semicolons.
+        Each Translation has:
+          - `text` — a single Russian translation (not multiple translations separated by semicolons)
+          - `rp` — British RP transcriptions (without slashes) for the English lexeme when pronounced
+            with this particular meaning; most translations share the same RP, but some words have
+            different pronunciations for different meanings (e.g., "lead" as verb vs noun)
         Do not include part-of-speech labels like (verb), (noun), etc.
         {% if example %}
         Ensure to include a translation matching the lexeme's meaning from this example (but not only).
@@ -445,12 +454,11 @@ async def confirm() -> ConfirmResult:
 def to_db_card(card) -> db_types.Card:
     return db_types.Card(
         lexeme=card.lexeme.base.text.strip(),
-        rp=card.lexeme.base.rp,
         past_simple=card.lexeme.past_simple.text if card.lexeme.past_simple else None,
         past_simple_rp=card.lexeme.past_simple.rp if card.lexeme.past_simple else [],
         past_participle=card.lexeme.past_participle.text if card.lexeme.past_participle else None,
         past_participle_rp=card.lexeme.past_participle.rp if card.lexeme.past_participle else [],
-        translations=[t.strip() for t in card.translations],
+        translations=[db_types.Translation(text=t.text.strip(), rp=t.rp) for t in card.translations],
         example=[card.example] if card.example is not None else [],
     )
 
