@@ -34,6 +34,7 @@ The daily card sender runs on DigitalOcean's App Platform. To create an app, run
 Once it is deployed, you can update it with:
 
     python -m verna.create_spec
+    doctl apps list --format ID,Spec.Name
     doctl apps update <app id> --spec .do/app.yaml
 
 Note that in both cases, you'll need to add the secrets manually in the UI afterwards.
