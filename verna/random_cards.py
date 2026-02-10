@@ -1,12 +1,13 @@
+import asyncio
 import sys
 import psycopg
 import textwrap
-import requests
-from verna import db, db_types, console
 
+import telegram
 from openai import OpenAI
 from pydantic import BaseModel
 
+from verna import db, db_types, console
 from verna.config import get_parser, Sections, print_config, ReasoningLevel
 
 
@@ -19,27 +20,18 @@ class GeneratedExamples(BaseModel):
     lexemes: list[LexemeExamples]
 
 
-def send_telegram_message(
-    text: str,
-    *,
-    bot_token: str,
-    chat_id: str,
-) -> None:
-    url = f'https://api.telegram.org/bot{bot_token}/sendMessage'
-    data = {'chat_id': chat_id, 'text': text, 'disable_web_page_preview': True}
-    resp = requests.post(url, data=data, timeout=15)
-    resp.raise_for_status()
-
-
-def send_to_telegram_all(
+async def send_to_telegram(
     messages: list[str],
     *,
     bot_token: str,
     chat_id: str,
 ) -> None:
-    for msg in messages:
-        if msg.strip():
-            send_telegram_message(msg, bot_token=bot_token, chat_id=chat_id)
+    bot = telegram.Bot(token=bot_token)
+    link_preview = telegram.LinkPreviewOptions(is_disabled=True)
+    async with bot:
+        for msg in messages:
+            if msg.strip():
+                await bot.send_message(chat_id=chat_id, text=msg, link_preview_options=link_preview)
 
 
 GENERAL_INSTRUCTIONS = 'Do not explain your actions. Do not ask questions. Output ONLY JSON matching the schema.'
@@ -129,7 +121,7 @@ def main() -> None:
 
     if cfg.send_to_tg:
         try:
-            send_to_telegram_all(tg_messages, bot_token=cfg.tg_bot_token, chat_id=str(cfg.tg_chat_id))
+            asyncio.run(send_to_telegram(tg_messages, bot_token=cfg.tg_bot_token, chat_id=str(cfg.tg_chat_id)))
             print('\n[Sent to Telegram]')
         except Exception as e:
             print(f'\n[Failed to send to Telegram: {e}]')

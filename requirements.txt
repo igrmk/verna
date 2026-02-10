@@ -1,8 +1,7 @@
 psycopg[binary]==3.2.10
 openai==2.9.0
 configargparse==1.7.1
-requests==2.32.5
-types-requests==2.32.4.20250913
+python-telegram-bot==22.6
 mypy==1.18.2
 platformdirs==4.4.0
 PyYAML==6.0.3
