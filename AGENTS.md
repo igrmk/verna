@@ -111,6 +111,9 @@ No test suite currently. Test manually by running commands with `--debug` flag.
 
 ## Common Development Tasks
 
+### Changing dependencies
+Update **both** `pyproject.toml` and `requirements.txt` — they are maintained in parallel.
+
 ### Adding a new CLI option
 1. Add argument in `config.py` under the appropriate `_add_*` function
 2. Use the option via `cfg.<option_name>` in the relevant module, don't use `getattr`
