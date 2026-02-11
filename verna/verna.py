@@ -5,6 +5,7 @@ import sys
 import textwrap
 import argparse
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 from typing import Any
 from verna import db, db_types
 from enum import Enum, auto
@@ -345,6 +346,13 @@ def print_translation(translation_data: TranslationResponse) -> None:
 
 def print_save_cards_header() -> None:
     console.print_formatted([('class:section-header', 'Save Cards'), ('', '\n')])
+
+
+@dataclass
+class SaveResult:
+    stop: bool = False
+    inserted: bool | None = None
+    card: db_types.Card | None = None
 
 
 class ConfirmResult(Enum):
@@ -710,11 +718,8 @@ async def confirm_and_save_lexeme(
     item: LexemeExtractionResponse.Item,
     tr: LexemeTranslationResponse,
     idx: int,
-) -> tuple[bool, bool | None]:
-    """Show confirm dialog and save lexeme. Returns (continue, inserted) tuple.
-
-    inserted is None if not saved, True if inserted, False if merged.
-    """
+) -> SaveResult:
+    """Show confirm dialog and save lexeme."""
     card = Card(
         lexeme=tr.lexeme,
         translations=tr.translations,
@@ -734,14 +739,14 @@ async def confirm_and_save_lexeme(
         lines_to_clear = _count_lines(parts) + 2
         if res == ConfirmResult.QUIT:
             console.clear_lines_above(lines_to_clear)
-            return False, None
+            return SaveResult(stop=True, card=db_card)
         if res == ConfirmResult.YES:
             inserted = save_card(cfg, db_card)
             console.clear_lines_above(lines_to_clear)
-            return True, inserted
+            return SaveResult(inserted=inserted, card=db_card)
         if res == ConfirmResult.NO:
             console.clear_lines_above(lines_to_clear)
-            return True, None
+            return SaveResult(card=db_card)
         if res == ConfirmResult.EXAMPLE:
             console.clear_lines_above(lines_to_clear)
             proceed = True
@@ -749,16 +754,13 @@ async def confirm_and_save_lexeme(
                 previous_examples += db_card.example
             example_coro = make_example(cfg, client, db_card, previous_examples)
             await show_status_while(f'Generating example for "{db_card.lexeme}"...', example_coro)
-    return True, None
+    return SaveResult(card=db_card)
 
 
 async def save_single_lexeme(
     cfg: argparse.Namespace, client: AsyncOpenAI, item: LexemeExtractionResponse.Item, idx: int
-) -> tuple[bool, bool | None]:
-    """Translate and save a single lexeme with status message. Returns (continue, inserted) tuple.
-
-    inserted is None if not saved, True if inserted, False if merged.
-    """
+) -> SaveResult:
+    """Translate and save a single lexeme with status message."""
     lexeme_text = item.lexeme.strip()
     coro = translate_lexeme(cfg, client, lexeme_text=lexeme_text, example=item.example)
     tr = await show_status_while(f'Translating "{lexeme_text}"...', coro)
@@ -770,52 +772,58 @@ async def save_extracted_lexemes(
 ) -> None:
     print_save_cards_header()
     saved: dict[int, bool] = {}
+    cards: dict[int, db_types.Card] = {}
 
     if len(items) == 1:
-        _, inserted = await save_single_lexeme(cfg, client, items[0], 0)
-        if inserted is not None:
-            console.print_styled(f'{_save_prefix(inserted)}[1] {items[0].lexeme}', style='class:success')
-        else:
-            console.print_styled(f'   [1] {items[0].lexeme}', style='class:lexeme-dim')
-        if items[0].example:
-            console.print_styled(f'     > {items[0].example}', style='class:example')
-        console.print_styled()
-        return
+        save_result = await save_single_lexeme(cfg, client, items[0], 0)
+        assert save_result.card is not None
+        cards[0] = save_result.card
+        if save_result.inserted is not None:
+            saved[0] = save_result.inserted
+    else:
 
-    async def on_select(idx: int) -> LexemeTranslationResponse:
-        return await translate_single_lexeme(cfg, client, items[idx])
+        async def on_select(idx: int) -> LexemeTranslationResponse:
+            return await translate_single_lexeme(cfg, client, items[idx])
 
-    selected_idx = 0
-    while True:
-        selector = LexemeSelector(items, selected_idx, saved, on_select=on_select)
-        result, idx, tr = await selector.run()
-        selected_idx = idx
-        if result == SelectionResult.QUIT:
-            # Print final state of the list
-            for i, item in enumerate(items):
-                if i in saved:
-                    console.print_styled(f'{_save_prefix(saved[i])}[{i + 1}] {item.lexeme}', style='class:success')
-                else:
-                    console.print_styled(f'   [{i + 1}] {item.lexeme}', style='class:lexeme-dim')
-                if item.example:
-                    console.print_styled(f'     > {item.example}', style='class:example')
+        selected_idx = 0
+        quit_requested = False
+        while not quit_requested:
+            selector = LexemeSelector(items, selected_idx, saved, on_select=on_select)
+            result, idx, tr = await selector.run()
+            selected_idx = idx
+            if result == SelectionResult.QUIT:
+                break
+            if result == SelectionResult.ALL:
+                for i in range(len(items)):
+                    if i not in saved:
+                        save_result = await save_single_lexeme(cfg, client, items[i], i)
+                        assert save_result.card is not None
+                        cards[i] = save_result.card
+                        if save_result.stop:
+                            quit_requested = True
+                            break
+                        if save_result.inserted is not None:
+                            saved[i] = save_result.inserted
+            elif result == SelectionResult.SELECTED:
+                assert tr is not None
+                save_result = await confirm_and_save_lexeme(cfg, client, items[idx], tr, idx)
+                assert save_result.card is not None
+                cards[idx] = save_result.card
+                if save_result.stop:
+                    break
+                if save_result.inserted is not None:
+                    saved[idx] = save_result.inserted
+
+    if cards:
+        for i in range(len(items)):
+            if i in cards:
+                prefix_style = 'class:success' if i in saved else ''
+                prefix = _save_prefix(saved[i]) if i in saved else '   '
+                parts = [(prefix_style, prefix)] + db_types.format_card(cards[i], indent=3)
+                console.print_formatted(parts)
                 console.print_styled()
-            return
-        if result == SelectionResult.ALL:
-            for i in range(len(items)):
-                if i not in saved:
-                    cont, inserted = await save_single_lexeme(cfg, client, items[i], i)
-                    if not cont:
-                        return
-                    if inserted is not None:
-                        saved[i] = inserted
-        elif result == SelectionResult.SELECTED:
-            assert tr is not None
-            cont, inserted = await confirm_and_save_lexeme(cfg, client, items[idx], tr, idx)
-            if not cont:
-                return
-            if inserted is not None:
-                saved[idx] = inserted
+    else:
+        console.print_styled('Nothing translated', 'class:dim')
 
 
 def normalize_input(text: str) -> str:
@@ -876,18 +884,20 @@ async def work() -> int:
     if lang_data.language == Language.ENGLISH and len(query.split()) == 1:
         item = LexemeExtractionResponse.Item(lexeme=query, example=None, cefr=CefrLevel.C2)
         if sys.stdin.isatty() and cfg.db_conn_string:
-            _, inserted = await save_single_lexeme(cfg, client, item, 0)
-            if inserted is not None:
-                console.print_styled(f'{_save_prefix(inserted)}[1] {item.lexeme}', style='class:success')
-            else:
-                console.print_styled(f'   [1] {item.lexeme}', style='class:lexeme-dim')
+            save_result = await save_single_lexeme(cfg, client, item, 0)
+            assert save_result.card is not None
+            prefix_style = 'class:success' if save_result.inserted is not None else ''
+            prefix = _save_prefix(save_result.inserted) if save_result.inserted is not None else '   '
+            parts = [(prefix_style, prefix)] + db_types.format_card(save_result.card, indent=3)
+            console.print_formatted(parts)
             console.print_styled()
         else:
             tr = await translate_lexeme(cfg, client, lexeme_text=query)
-            card = Card(lexeme=tr.lexeme, translations=tr.translations, example=None)
-            db_card = to_db_card(card)
-            parts = [('class:lexeme', '[1] ')] + db_types.format_card(db_card, indent=2)
-            console.print_formatted(parts)
+            ai_card = Card(lexeme=tr.lexeme, translations=tr.translations, example=None)
+            db_card = to_db_card(ai_card)
+            parts = db_types.format_card(db_card, indent=3)
+            console.print_formatted([('', '   ')] + parts)
+            console.print_styled()
         return 0
 
     translation_task = asyncio.create_task(translate_text(cfg, client, query=query, source_language=lang_data.language))
