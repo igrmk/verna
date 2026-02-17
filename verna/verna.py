@@ -1,3 +1,4 @@
+import openai
 import asyncio
 import time
 import json
@@ -13,6 +14,7 @@ import psycopg
 from openai import APIError, APITimeoutError, AsyncOpenAI
 from openai.types.responses import ResponseInputParam
 from openai.types.shared_params import Reasoning
+import pydantic
 from pydantic import BaseModel, Field
 from prompt_toolkit import PromptSession
 from prompt_toolkit.application import Application, get_app
@@ -96,7 +98,8 @@ async def _responses_parse(
     step: str,
     instructions: str,
     user_input: str,
-    text_format: type[BaseModel],
+    text_format: type[BaseModel] | openai.Omit,
+    parse_as: type[BaseModel] | None = None,
     model: str | None = None,
 ):
     model_id = model or cfg.model
@@ -106,9 +109,10 @@ async def _responses_parse(
         console.print_debug('USER INPUT:')
         console.print_debug(user_input)
         console.print_styled()
-        console.print_debug('SCHEMA:')
-        schema = text_format.model_json_schema()
-        console.print_debug(json.dumps(schema, indent=2))
+        if isinstance(text_format, type) and issubclass(text_format, BaseModel):
+            console.print_debug('SCHEMA:')
+            schema = text_format.model_json_schema()
+            console.print_debug(json.dumps(schema, indent=2))
         console.print_styled()
         console.print_debug(f'INSTRUCTIONS:\n{instructions}\n')
 
@@ -143,6 +147,15 @@ async def _responses_parse(
     elapsed = time.perf_counter() - start_time
     console.print_log(f'[{step}] {model_id} responded in {elapsed:.1f}s')
 
+    if cfg.debug:
+        console.print_debug(f'Raw response: {resp.output_text}')
+        console.print_styled()
+
+    if parse_as is not None:
+        try:
+            return parse_as.model_validate_json(resp.output_text)
+        except pydantic.ValidationError:
+            raise SystemExit(f'AI response could not be parsed ({step})')
     if resp.output_parsed is None:
         raise SystemExit(f'AI response could not be parsed ({step})')
     return resp.output_parsed
@@ -155,7 +168,8 @@ async def detect_language(cfg: argparse.Namespace, client: AsyncOpenAI, query: s
         step='LANGUAGE DETECTION',
         instructions=LANGUAGE_DETECTION_INSTRUCTIONS,
         user_input=query,
-        text_format=LanguageDetectionResponse,
+        text_format=LanguageDetectionResponse if cfg.structured_detect else openai.omit,
+        parse_as=None if cfg.structured_detect else LanguageDetectionResponse,
         model=cfg.model_detect or cfg.model,
     )
 
@@ -215,7 +229,13 @@ async def translate_lexeme(
 
 GENERAL_INSTRUCTIONS = 'Do not explain your actions. Do not ask questions. Output ONLY JSON matching the schema'
 
-LANGUAGE_DETECTION_INSTRUCTIONS = 'You are a language detector. Set `language` to the language of the user input.'
+LANGUAGE_DETECTION_INSTRUCTIONS = textwrap.dedent("""
+    You are a language detector.
+    Reply with exactly one of:
+    {"language":"ENGLISH"}
+    {"language":"RUSSIAN"}
+    {"language":"OTHER"}
+""")
 
 TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
     textwrap.dedent("""
