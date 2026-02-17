@@ -17,6 +17,7 @@ dependencies = [
   'prompt_toolkit==3.0.52',
   'pydantic==2.11.9',
   'Jinja2==3.1.6',
+  'lingua-language-detector==2.1.1',
 ]
 authors = [
   { name = 'igrmk' }

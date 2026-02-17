@@ -23,6 +23,7 @@ from prompt_toolkit.data_structures import Point
 from prompt_toolkit.layout import Layout, HSplit, Window, FormattedTextControl, ScrollablePane
 from prompt_toolkit.styles import Style
 
+from lingua import LanguageDetectorBuilder, Language as LinguaLanguage
 from verna.upper_str_enum import UpperStrEnum
 from verna.config import get_parser, Sections, print_config, ReasoningLevel, CefrLevel
 from verna import console, styles
@@ -58,10 +59,6 @@ class Card(BaseModel):
     lexeme: Lexeme
     translations: list[str]
     example: str | None
-
-
-class LanguageDetectionResponse(BaseModel):
-    language: Language
 
 
 class TranslationResponse(BaseModel):
@@ -161,17 +158,19 @@ async def _responses_parse(
     return resp.output_parsed
 
 
-async def detect_language(cfg: argparse.Namespace, client: AsyncOpenAI, query: str) -> LanguageDetectionResponse:
-    return await _responses_parse(
-        cfg,
-        client,
-        step='LANGUAGE DETECTION',
-        instructions=LANGUAGE_DETECTION_INSTRUCTIONS,
-        user_input=query,
-        text_format=LanguageDetectionResponse if cfg.structured_detect else openai.omit,
-        parse_as=None if cfg.structured_detect else LanguageDetectionResponse,
-        model=cfg.model_detect or cfg.model,
-    )
+_LINGUA_DETECTOR = LanguageDetectorBuilder.from_languages(LinguaLanguage.ENGLISH, LinguaLanguage.RUSSIAN).build()
+
+_LINGUA_TO_LANGUAGE = {
+    LinguaLanguage.ENGLISH: Language.ENGLISH,
+    LinguaLanguage.RUSSIAN: Language.RUSSIAN,
+}
+
+
+def detect_language(query: str) -> Language:
+    result = _LINGUA_DETECTOR.detect_language_of(query)
+    if result is None:
+        return Language.OTHER
+    return _LINGUA_TO_LANGUAGE[result]
 
 
 async def translate_text(
@@ -228,14 +227,6 @@ async def translate_lexeme(
 
 
 GENERAL_INSTRUCTIONS = 'Do not explain your actions. Do not ask questions. Output ONLY JSON matching the schema'
-
-LANGUAGE_DETECTION_INSTRUCTIONS = textwrap.dedent("""
-    You are a language detector.
-    Reply with exactly one of:
-    {"language":"ENGLISH"}
-    {"language":"RUSSIAN"}
-    {"language":"OTHER"}
-""")
 
 TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
     textwrap.dedent("""
@@ -344,8 +335,8 @@ EXAMPLE_INSTRUCTIONS = JINJA_ENV.from_string(
 )
 
 
-def print_identified_language(lang_data: LanguageDetectionResponse) -> None:
-    console.print_log(f'Language detected: {lang_data.language}')
+def print_identified_language(language: Language) -> None:
+    console.print_log(f'Language detected: {language}')
     console.print_styled()
 
 
@@ -893,15 +884,16 @@ async def work() -> int:
         raise no_query_error
     query = normalize_input(query)
 
-    client = AsyncOpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
-    lang_data = await detect_language(cfg, client, query)
-    print_identified_language(lang_data)
+    language = detect_language(query)
+    print_identified_language(language)
 
-    if lang_data.language == Language.OTHER:
+    client = AsyncOpenAI(base_url=cfg.api_base_url, api_key=cfg.api_key)
+
+    if language == Language.OTHER:
         console.print_styled('UNSUPPORTED LANGUAGE')
         return 0
 
-    if lang_data.language == Language.ENGLISH and len(query.split()) == 1:
+    if language == Language.ENGLISH and len(query.split()) == 1:
         item = LexemeExtractionResponse.Item(lexeme=query, example=None, cefr=CefrLevel.C2)
         if sys.stdin.isatty() and cfg.db_conn_string:
             save_result = await save_single_lexeme(cfg, client, item, 0)
@@ -920,13 +912,13 @@ async def work() -> int:
             console.print_styled()
         return 0
 
-    translation_task = asyncio.create_task(translate_text(cfg, client, query=query, source_language=lang_data.language))
-    if lang_data.language == Language.ENGLISH:
+    translation_task = asyncio.create_task(translate_text(cfg, client, query=query, source_language=language))
+    if language == Language.ENGLISH:
         lexeme_task = asyncio.create_task(extract_lexemes(cfg, client, query=query))
     translation_data = await translation_task
     print_translation(translation_data)
     print_typo_note(translation_data.typo_note)
-    if lang_data.language == Language.ENGLISH:
+    if language == Language.ENGLISH:
         lexeme_data = await lexeme_task
         lexeme_items = [item for item in lexeme_data.items if item.cefr >= cfg.level]
         if lexeme_items:

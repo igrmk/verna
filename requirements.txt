@@ -9,3 +9,4 @@ types-PyYAML==6.0.12.20250915
 prompt_toolkit==3.0.52
 pydantic==2.11.9
 Jinja2==3.1.6
+lingua-language-detector==2.1.1

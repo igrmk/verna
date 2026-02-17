@@ -96,19 +96,6 @@ def _add_ai(p: configargparse.ArgParser) -> None:
         help='AI model ID',
     )
     p.add_argument(
-        '--model-detect',
-        env_var='VERNA_MODEL_DETECT',
-        type=str,
-        required=False,
-        help='AI model ID for language detection (defaults to --model)',
-    )
-    p.add_argument(
-        '--structured-detect',
-        env_var='VERNA_STRUCTURED_DETECT',
-        action=argparse.BooleanOptionalAction,
-        help='use structured outputs for language detection',
-    )
-    p.add_argument(
         '--model-translate-text',
         env_var='VERNA_MODEL_TRANSLATE_TEXT',
         type=str,
