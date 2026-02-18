@@ -42,7 +42,7 @@ verna/
 
 ## Main Workflow (`verna`)
 
-1. **Language Detection** — Detect if input is English, Russian, or other
+1. **Language Detection** — Detect if input is English, Russian, or other (via lingua-language-detector)
 2. **Translation** — Translate the input text (English <-> Russian)
 3. **Lexeme Extraction** — For English input, extract lexemes with CEFR levels
 4. **Lexeme Translation** — Translate each extracted lexeme individually
@@ -78,7 +78,7 @@ Run migrations with: `python -m verna.migrator`
 
 - Uses OpenAI's `responses.parse()` with Pydantic models for structured outputs
 - Prompts are Jinja2 templates in `verna.py`
-- Different models can be specified for different tasks (detection, translation, extraction)
+- Different models can be specified for different tasks (translation, extraction)
 - Supports reasoning effort levels via `--reason` or `--think` flags
 
 ## Dev Environment
