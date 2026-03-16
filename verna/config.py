@@ -184,6 +184,12 @@ def _add_verna(p: configargparse.ArgParser) -> None:
         required=True,
         help='save lexemes at the specified level or higher',
     )
+    p.add_argument(
+        '--max-history',
+        type=int,
+        metavar='N',
+        help='maximum number of history entries to keep',
+    )
 
 
 def get_parser(

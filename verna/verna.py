@@ -4,8 +4,9 @@ import time
 import json
 import sys
 import textwrap
+from pathlib import Path
 import argparse
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Iterable
 from dataclasses import dataclass
 from typing import Any
 from verna import db, db_types
@@ -18,6 +19,7 @@ import pydantic
 from pydantic import BaseModel, Field
 from prompt_toolkit import PromptSession
 from prompt_toolkit.application import Application, get_app
+from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.data_structures import Point
 from prompt_toolkit.layout import Layout, HSplit, Window, FormattedTextControl, ScrollablePane
@@ -25,6 +27,7 @@ from prompt_toolkit.styles import Style
 
 from lingua import LanguageDetectorBuilder, Language as LinguaLanguage
 from verna.upper_str_enum import UpperStrEnum
+from platformdirs import user_data_dir
 from verna.config import get_parser, Sections, print_config, ReasoningLevel, CefrLevel
 from verna import console, styles
 
@@ -848,17 +851,48 @@ def normalize_input(text: str) -> str:
     return text
 
 
-async def read_interactively() -> str:
+class _CappedFileHistory(FileHistory):
+    def __init__(self, filename: str, max_entries: int) -> None:
+        self.max_entries = max_entries
+        super().__init__(filename)
+
+    def load_history_strings(self) -> Iterable[str]:
+        strings = list(super().load_history_strings())
+        if len(strings) > self.max_entries:
+            strings = strings[: self.max_entries]
+            self._rewrite(strings)
+        return strings
+
+    def store_string(self, string: str) -> None:
+        super().store_string(string)
+        if len(self._loaded_strings) > self.max_entries:
+            self._loaded_strings = self._loaded_strings[: self.max_entries]
+            self._rewrite(self._loaded_strings)
+
+    def _rewrite(self, strings: list[str]) -> None:
+        with open(self.filename, 'wb') as f:
+            for entry in reversed(strings):
+                for line in entry.split('\n'):
+                    f.write(f'+{line}\n'.encode())
+                f.write(b'\n')
+
+
+async def read_interactively(max_history: int) -> str:
     kb = KeyBindings()
 
     @kb.add('c-d')
     def _(event):
-        event.app.exit(result=event.app.current_buffer.text)
+        buf = event.app.current_buffer
+        if buf.text:
+            buf.append_to_history()
+        event.app.exit(result=buf.text)
 
     def cont(width: int, line_number: int, is_soft_wrap: int) -> str:
         return ' ' * width if is_soft_wrap else ' ' * (width - 2) + '… '
 
-    session: PromptSession = PromptSession()
+    history_path = Path(user_data_dir('verna')) / 'history'
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    session: PromptSession = PromptSession(history=_CappedFileHistory(str(history_path), max_history))
     return await session.prompt_async('Ctrl-D> ', multiline=True, prompt_continuation=cont, key_bindings=kb)
 
 
@@ -879,7 +913,7 @@ async def work() -> int:
             if not query:
                 raise no_query_error
     if not query:
-        query = (await read_interactively()).strip()
+        query = (await read_interactively(cfg.max_history)).strip()
     if not query:
         raise no_query_error
     query = normalize_input(query)
