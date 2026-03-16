@@ -18,6 +18,7 @@
       "Edit",
       "Write",
       "WebSearch",
+      "WebFetch",
       "Bash(git diff:*)",
       "Bash(git log:*)",
       "Bash(git show:*)",
