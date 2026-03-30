@@ -877,7 +877,7 @@ class _CappedFileHistory(FileHistory):
                 f.write(b'\n')
 
 
-async def read_interactively(max_history: int) -> str:
+async def read_interactively(history: _CappedFileHistory) -> str:
     kb = KeyBindings()
 
     @kb.add('c-d')
@@ -890,9 +890,7 @@ async def read_interactively(max_history: int) -> str:
     def cont(width: int, line_number: int, is_soft_wrap: int) -> str:
         return ' ' * width if is_soft_wrap else ' ' * (width - 2) + '… '
 
-    history_path = Path(user_data_dir('verna')) / 'history'
-    history_path.parent.mkdir(parents=True, exist_ok=True)
-    session: PromptSession = PromptSession(history=_CappedFileHistory(str(history_path), max_history))
+    session: PromptSession = PromptSession(history=history)
     return await session.prompt_async('Ctrl-D> ', multiline=True, prompt_continuation=cont, key_bindings=kb)
 
 
@@ -905,6 +903,10 @@ async def work() -> int:
         print_config(cfg)
         return 0
 
+    history_path = Path(user_data_dir('verna')) / 'history'
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    history = _CappedFileHistory(str(history_path), cfg.max_history)
+
     query = ' '.join(cfg.query).strip()
     no_query_error = SystemExit('You must provide a query')
     if not query:
@@ -912,8 +914,10 @@ async def work() -> int:
             query = sys.stdin.read().strip()
             if not query:
                 raise no_query_error
-    if not query:
-        query = (await read_interactively(cfg.max_history)).strip()
+    if query:
+        history.store_string(query)
+    else:
+        query = (await read_interactively(history)).strip()
     if not query:
         raise no_query_error
     query = normalize_input(query)
