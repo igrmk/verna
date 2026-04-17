@@ -247,7 +247,8 @@ TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
               - contractions such as "wanna" or "gonna"
               - UK-only spelling variants
           {% if target_language == "Russian" and word_count <= 10 %}
-          - `rp` — British RP transcription of the user input without slashes
+          - `rp` — SSBE (Standard Southern British English) transcription of the user input without slashes
+            (Geoff Lindsey-style: ɛ for DRESS, ɛː for SQUARE, əw for GOAT, ɑj for PRICE, aw for MOUTH)
           {% else %}
           - `rp` — set to null
           {% endif %}
@@ -294,7 +295,9 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
         {% endif %}
         First, normalise it to its base form (use plural if it is the standard form for the meaning in the sentence)
         and fill the `lexeme` object:
-          - `base` — required; Form with `text` (lexeme in base form) and `rp` (transcriptions without slashes)
+          - `base` — required; Form with `text` (lexeme in base form) and `rp`
+            (SSBE/Standard Southern British English transcriptions without slashes, Geoff Lindsey-style:
+            ɛ for DRESS, ɛː for SQUARE, əw for GOAT, ɑj for PRICE, aw for MOUTH)
           - `past_simple` and `past_participle` — only if L is an irregular verb; same Form structure
 
         Then translate it to Russian and fill
