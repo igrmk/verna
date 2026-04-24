@@ -248,7 +248,8 @@ TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
               - UK-only spelling variants
           {% if target_language == "Russian" and word_count <= 10 %}
           - `rp` — SSBE (Standard Southern British English) transcription of the user input without slashes
-            (Geoff Lindsey-style: ɛ for DRESS, ɛː for SQUARE, əw for GOAT, ɑj for PRICE, aw for MOUTH)
+            (Geoff Lindsey-style: ɛ for DRESS, ɛː for SQUARE, əw for GOAT, ɑj for PRICE, aw for MOUTH).
+            Mark stress in multisyllabic words.
           {% else %}
           - `rp` — set to null
           {% endif %}
@@ -297,7 +298,8 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
         and fill the `lexeme` object:
           - `base` — required; Form with `text` (lexeme in base form) and `rp`
             (SSBE/Standard Southern British English transcriptions without slashes, Geoff Lindsey-style:
-            ɛ for DRESS, ɛː for SQUARE, əw for GOAT, ɑj for PRICE, aw for MOUTH)
+            ɛ for DRESS, ɛː for SQUARE, əw for GOAT, ɑj for PRICE, aw for MOUTH).
+            Mark stress in multisyllabic words.
           - `past_simple` and `past_participle` — only if L is an irregular verb; same Form structure
 
         Then translate it to Russian and fill
