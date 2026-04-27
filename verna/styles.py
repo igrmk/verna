@@ -13,7 +13,9 @@ PT_STYLES = {
     'warning': 'fg:ansiyellow',
     'success': 'fg:ansigreen',
     'note-header': 'fg:ansiwhite bold italic',
-    'transcription': 'italic',
+    # No italic: italic `a` is single-storey and indistinguishable from `ɑ`,
+    # which is a different vowel in Lindsey transcription (TRAP `a` vs START `ɑː`).
+    'transcription': '',
     # TUI editor styles
     'frame.border': 'fg:ansibrightblack',
     'frame.label': 'fg:ansiwhite',
