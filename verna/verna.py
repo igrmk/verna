@@ -247,8 +247,27 @@ TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
               - contractions such as "wanna" or "gonna"
               - UK-only spelling variants
           {% if target_language == "Russian" and word_count <= 10 %}
-          - `rp` — SSBE (Standard Southern British English) transcription of the user input without slashes
-            (Geoff Lindsey-style: ɛ for DRESS, ɛː for SQUARE, əw for GOAT, ɑj for PRICE, aw for MOUTH).
+          - `rp` — SSBE (Standard Southern British English) transcription of the user input without slashes.
+            Geoff Lindsey-style:
+              - ɪ for KIT
+              - ɛ for DRESS
+              - a for TRAP
+              - ɔ for LOT/CLOTH
+              - ɵ for FOOT
+              - ə for commA
+              - ʌ for STRUT
+              - ɪj for FLEECE
+              - ɛj for FACE
+              - ɑj for PRICE
+              - oj for CHOICE
+              - aw for MOUTH
+              - əw for GOAT
+              - ʉw for GOOSE
+              - ɪː for NEAR
+              - ɛː for SQUARE
+              - ɑː for START/PALM/BATH
+              - oː for THOUGHT/NORTH/FORCE/CURE
+              - əː for NURSE
             Mark stress in multisyllabic words.
           {% else %}
           - `rp` — set to null
@@ -297,8 +316,27 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
         First, normalise it to its base form (use plural if it is the standard form for the meaning in the sentence)
         and fill the `lexeme` object:
           - `base` — required; Form with `text` (lexeme in base form) and `rp`
-            (SSBE/Standard Southern British English transcriptions without slashes, Geoff Lindsey-style:
-            ɛ for DRESS, ɛː for SQUARE, əw for GOAT, ɑj for PRICE, aw for MOUTH).
+            (SSBE/Standard Southern British English transcriptions without slashes).
+            Geoff Lindsey-style:
+              - ɪ for KIT
+              - ɛ for DRESS
+              - a for TRAP
+              - ɔ for LOT/CLOTH
+              - ɵ for FOOT
+              - ə for commA
+              - ʌ for STRUT
+              - ɪj for FLEECE
+              - ɛj for FACE
+              - ɑj for PRICE
+              - oj for CHOICE
+              - aw for MOUTH
+              - əw for GOAT
+              - ʉw for GOOSE
+              - ɪː for NEAR
+              - ɛː for SQUARE
+              - ɑː for START/PALM/BATH
+              - oː for THOUGHT/NORTH/FORCE/CURE
+              - əː for NURSE
             Mark stress in multisyllabic words.
           - `past_simple` and `past_participle` — only if L is an irregular verb; same Form structure
 
