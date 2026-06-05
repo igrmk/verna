@@ -125,7 +125,7 @@ async def _responses_parse(
     while True:
         start_time = time.perf_counter()
         try:
-            resp = await client.responses.parse(
+            raw_resp = await client.responses.with_raw_response.parse(
                 model=model_id,
                 instructions=GENERAL_INSTRUCTIONS,
                 input=input_messages,
@@ -133,6 +133,7 @@ async def _responses_parse(
                 reasoning=reasoning,
                 timeout=TIMEOUT,
             )
+            resp = raw_resp.parse()
             break
         except APITimeoutError:
             console.print_warning(f'[{step}] Request timed out after {TIMEOUT}s')
@@ -148,6 +149,7 @@ async def _responses_parse(
     console.print_log(f'[{step}] {model_id} responded in {elapsed:.1f}s')
 
     if cfg.debug:
+        console.print_debug(f'HTTP status: {raw_resp.status_code}')
         console.print_debug(f'Raw response: {resp.output_text}')
         console.print_styled()
 
