@@ -18,7 +18,7 @@ from openai.types.shared_params import Reasoning
 import pydantic
 from pydantic import BaseModel, Field
 from prompt_toolkit import PromptSession
-from prompt_toolkit.application import Application, get_app
+from prompt_toolkit.application import Application
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.data_structures import Point
@@ -421,6 +421,18 @@ class ConfirmResult(Enum):
     QUIT = auto()
 
 
+def _add_ctrl_c_abort(kb: KeyBindings) -> None:
+    """Bind Ctrl+C so it aborts the running Application by raising KeyboardInterrupt.
+
+    prompt_toolkit captures SIGINT while an Application is on screen and, finding no
+    binding for it, silently swallows it — leaving an in-flight request uninterruptible.
+    """
+
+    @kb.add('c-c')
+    def _(event):
+        event.app.exit(exception=KeyboardInterrupt())
+
+
 class ConfirmSelector:
     OPTIONS = [
         (ConfirmResult.YES, 'Save', 'y'),
@@ -486,6 +498,7 @@ class ConfirmSelector:
             self.result = ConfirmResult.QUIT
             event.app.exit()
 
+        _add_ctrl_c_abort(kb)
         return kb
 
     async def run(self) -> ConfirmResult:
@@ -577,6 +590,7 @@ class LexemeSelector[T]:
         self._loading_idx: int | None = None
         self._spinner_idx = 0
         self._select_result: T | None = None
+        self._select_task: asyncio.Task[None] | None = None
 
     def _get_formatted_text(self) -> list[tuple[str, str]]:
         lines: list[tuple[str, str]] = []
@@ -657,6 +671,12 @@ class LexemeSelector[T]:
     def _create_key_bindings(self) -> KeyBindings:
         kb = KeyBindings()
 
+        @kb.add('c-c')
+        def _abort(event):
+            if self._select_task is not None and not self._select_task.done():
+                self._select_task.cancel()
+            event.app.exit(exception=KeyboardInterrupt())
+
         @kb.add('up')
         @kb.add('k')
         def _up(event):
@@ -680,7 +700,7 @@ class LexemeSelector[T]:
             if self._loading_idx is not None:
                 return
             if self._on_select:
-                asyncio.create_task(self._run_select(event.app, self.selected_idx))
+                self._select_task = asyncio.create_task(self._run_select(event.app, self.selected_idx))
             else:
                 self.result = SelectionResult.SELECTED
                 event.app.exit()
@@ -708,7 +728,7 @@ class LexemeSelector[T]:
                 if idx < len(self.items):
                     self.selected_idx = idx
                     if self._on_select:
-                        asyncio.create_task(self._run_select(event.app, idx))
+                        self._select_task = asyncio.create_task(self._run_select(event.app, idx))
                     else:
                         self.result = SelectionResult.SELECTED
                         event.app.exit()
@@ -742,24 +762,46 @@ def _count_lines(parts: list[tuple[str, str]]) -> int:
 
 
 async def show_status_while(message: str, coro):
-    """Show a status message while coroutine runs, then erase it."""
+    """Show a status message while coroutine runs, then erase it.
+
+    Ctrl+C cancels the coroutine and aborts the program so an in-flight request can
+    always be interrupted.
+    """
     result = None
 
     async def do_work():
         nonlocal result
-        result = await coro
-        get_app().exit()
+        try:
+            result = await coro
+        finally:
+            if app.is_running:
+                app.exit()
+
+    kb = KeyBindings()
+    _add_ctrl_c_abort(kb)
 
     control = FormattedTextControl(lambda: [('class:dim', message)])
     window = Window(control, height=1)
     layout = Layout(window)
     style = Style.from_dict(styles.PT_STYLES)
-    app: Application = Application(layout=layout, style=style, full_screen=False, erase_when_done=True)
+    app: Application = Application(layout=layout, style=style, key_bindings=kb, full_screen=False, erase_when_done=True)
 
-    async with asyncio.TaskGroup() as tg:
-        tg.create_task(do_work())
-        tg.create_task(app.run_async())
+    worker = asyncio.ensure_future(do_work())
+    aborted = False
+    try:
+        await app.run_async()
+    except KeyboardInterrupt:
+        aborted = True
+    finally:
+        worker.cancel()
 
+    try:
+        await worker
+    except asyncio.CancelledError:
+        pass
+
+    if aborted:
+        raise KeyboardInterrupt
     return result
 
 
