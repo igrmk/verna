@@ -373,7 +373,9 @@ EXAMPLE_INSTRUCTIONS = JINJA_ENV.from_string(
         {%- if previous_examples -%}
             {{- '\n\n' -}}
             Don't use any of the following examples
-            and try to produce one that doesn't resemble any of them:
+            and try to produce one that doesn't resemble any of them.
+            If the lexeme has several meanings,
+            choose one that differs from the meanings already used in these examples:
             {%- for x in previous_examples -%}
                 {{- '\n  ' -}}
                 - {{ x }}
