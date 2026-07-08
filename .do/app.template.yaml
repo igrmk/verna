@@ -10,7 +10,7 @@ jobs:
     repo: igrmk/verna
     branch: main
     deploy_on_push: true
-  build_command: pip install .
+  build_command: uv sync --frozen --no-dev
   run_command: verna-cards
   schedule:
     cron: 0 8 * * *
