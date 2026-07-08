@@ -24,11 +24,15 @@
       "Bash(git show:*)",
       "Bash(git status:*)",
       "Bash(git ls-tree:*)",
-      "Bash(python -m py_compile:*)",
-      "Bash(python -m verna.create_spec:*)",
-      "Bash(ruff check:*)",
-      "Bash(ruff format:*)",
-      "Bash(mypy:*)",
+      "Bash(uv run python -m py_compile:*)",
+      "Bash(uv run python -m verna.create_spec:*)",
+      "Bash(uv run ruff check:*)",
+      "Bash(uv run ruff format:*)",
+      "Bash(uv run mypy:*)",
+      "Bash(uv lock:*)",
+      "Bash(uv sync:*)",
+      "Bash(uv add:*)",
+      "Bash(uv tool install:*)",
       "Bash(ls:*)"
     ]
   }

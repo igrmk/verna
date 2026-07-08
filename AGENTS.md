@@ -82,14 +82,14 @@ Run migrations with: `python -m verna.migrator`
 - Supports reasoning effort levels via `--reason` or `--think` flags
 
 ## Dev Environment
-- Virtual environments:
-    created by github.com/igrmk/cavez
-    managed by micromamba
-    local package installation: pip
+- Package and virtualenv management: uv — run `uv sync` to create/update the local `.venv`
+    (includes the `dev` dependency group)
+- Dev tools (mypy, ruff, PyYAML) live in the `dev` group under `[dependency-groups]` in `pyproject.toml`
 - Linting: Ruff
 - Type checking: mypy
-- Run locally: python -m verna
-- Before committing, always run: `ruff check --fix verna/ && ruff format verna/ && mypy verna/`
+- Run locally: `uv run python -m verna`
+- Install the CLI globally: `uv tool install . --force`
+- Before committing, always run: `uv run ruff check --fix verna/ && uv run ruff format verna/ && uv run mypy verna/`
 
 ## Code Style
 
@@ -113,7 +113,8 @@ No test suite currently. Test manually by running commands with `--debug` flag.
 ## Common Development Tasks
 
 ### Changing dependencies
-Update **both** `pyproject.toml` and `requirements.txt` — they are maintained in parallel.
+Use `uv add <pkg>` for runtime deps and `uv add --dev <pkg>` for dev tools —
+both update `pyproject.toml` and `uv.lock`. Commit both files.
 
 ### Adding a new CLI option
 1. Add argument in `config.py` under the appropriate `_add_*` function

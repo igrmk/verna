@@ -21,7 +21,7 @@ Installation
 
 From the project directory run:
 
-    pipx install . --force
+    uv tool install . --force
 
 Deploy
 ------

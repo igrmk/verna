@@ -29,6 +29,14 @@ verna = 'verna.verna:main'
 verna-cards = 'verna.random_cards:main'
 verna-edit = 'verna.edit:main'
 
+[dependency-groups]
+dev = [
+  'mypy==1.18.2',
+  'ruff==0.15.12',
+  'PyYAML==6.0.3',
+  'types-PyYAML==6.0.12.20250915',
+]
+
 [tool.setuptools]
 packages = ['verna']
 
