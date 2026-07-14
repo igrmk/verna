@@ -270,6 +270,7 @@ TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
               - ɑː for START/PALM/BATH
               - oː for THOUGHT/NORTH/FORCE/CURE
               - əː for NURSE
+            Use two-symbol dʒ instead of the ligature ʤ.
             Mark stress in multisyllabic words.
           {% else %}
           - `rp` — set to null
@@ -339,6 +340,7 @@ LEXEME_TRANSLATION_INSTRUCTIONS = JINJA_ENV.from_string(
               - ɑː for START/PALM/BATH
               - oː for THOUGHT/NORTH/FORCE/CURE
               - əː for NURSE
+            Use two-symbol dʒ instead of the ligature ʤ.
             Mark stress in multisyllabic words.
           - `past_simple` and `past_participle` — only if L is an irregular verb; same Form structure
 
