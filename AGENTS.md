@@ -18,7 +18,8 @@
 
 ```
 verna/
-├── verna.py          # Main translation CLI (entry point: `verna`)
+├── cli.py            # Light CLI front-end: args, history, prompt (entry point: `verna`)
+├── verna.py          # Translation, lexeme extraction and card saving
 ├── random_cards.py   # Daily cards + story generator (entry point: `verna-cards`)
 ├── edit.py           # TUI editor for lexemes (entry point: `verna-edit`)
 ├── config.py         # CLI argument parsing and configuration
@@ -36,7 +37,7 @@ verna/
 
 | Command        | Module                     | Description                                          |
 |----------------|----------------------------|------------------------------------------------------|
-| `verna`        | `verna.verna:main`         | Main translation tool                                |
+| `verna`        | `verna.cli:main`           | Main translation tool                                |
 | `verna-cards`  | `verna.random_cards:main`  | Fetch random cards, generate examples, send to Telegram |
 | `verna-edit`   | `verna.edit:main`          | TUI editor for searching and editing lexemes         |
 

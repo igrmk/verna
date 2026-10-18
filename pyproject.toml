@@ -25,7 +25,7 @@ authors = [
 license = { text = 'MIT' }
 
 [project.scripts]
-verna = 'verna.verna:main'
+verna = 'verna.cli:main'
 verna-cards = 'verna.random_cards:main'
 verna-edit = 'verna.edit:main'
 
